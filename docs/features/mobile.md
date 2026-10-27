@@ -2,6 +2,8 @@
 
 衡析 Pocket 是電腦版的手機網頁版（PWA）：加入主畫面後像 App 一樣使用，資料一律向電腦上的 Nexus 取得，並負責推播通知。連線方式的設定步驟見 [EquiLens-Pocket/README.md](../../EquiLens-Pocket/README.md)。
 
+也可以從 Google Play／App Store 安裝[商店版 App](mobile-app.md)，畫面相同，另有原生推播與示意模式。
+
 一般手機使用單頁版面；摺疊手機展開、平板或橫向時自動改為左右或上下雙頁，見[摺疊手機與平板](foldable.md)。
 
 ## 分頁

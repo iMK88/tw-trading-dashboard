@@ -97,3 +97,23 @@ test('day-trade long signals are held and sent as one digest at each 5-minute ma
   assert.equal(push.digestNotification([]), null);
   assert.match(push.digestNotification([sig('dt-vwap', '3406', '玉晶光')]).title, /玉晶光 3406 多週期回測轉強/, 'a single signal keeps the normal format');
 });
+
+test('store app devices: registered with a public relay, delivered through it, pruned when the relay says gone', async () => {
+  const token = t => `fcm-${t}:${'A'.repeat(140)}`, relay = 'https://push-relay.example.workers.dev/v1/send';
+  for (const bad of [{ token: 'short', platform: 'android', relay }, { token: token('a'), platform: 'web', relay }, { token: token('a'), platform: 'ios', relay: 'http://push-relay.example.com/v1' },
+    { token: token('a'), platform: 'ios', relay: 'https://localhost/v1' }, { token: token('a'), platform: 'ios', relay: 'https://192.168.1.2/v1' }, { token: 'bad token with spaces and more than twenty', platform: 'ios', relay }])
+    assert.throws(() => push.subscribeApp(bad), /格式錯誤/, JSON.stringify(bad));
+  const before = push.subscriptionCount();
+  push.subscribeApp({ token: token('a'), platform: 'android', relay }); push.subscribeApp({ token: token('a'), platform: 'android', relay }); push.subscribeApp({ token: token('b'), platform: 'ios', relay });
+  assert.equal(push.subscriptionCount(), before + 2, 'deduplicated by token'); assert.ok(push.hasApp(token('b'))); assert.ok(!push.hasApp('unknown'));
+  const calls = [];
+  const sent = await push.sendToAll({ title: '🚀 台積電 急拉', body: '+2.1%', tag: 'surge-up:2330', url: '/#live' }, { fetcher: async (url, opt) => {
+    calls.push({ url, opt }); if (url !== relay) return { ok: true, status: 201 };
+    const b = JSON.parse(opt.body); return { ok: b.token !== token('b'), status: b.token === token('b') ? 410 : 200 };
+  } });
+  const app = calls.filter(c => c.url === relay).map(c => JSON.parse(c.opt.body));
+  assert.equal(app.length, 2); assert.deepEqual(Object.keys(app[0]).sort(), ['body', 'platform', 'tag', 'title', 'token', 'url']);
+  assert.equal(app.find(x => x.platform === 'android').title, '🚀 台積電 急拉'); assert.equal(calls.find(c => c.url === relay).opt.headers['Content-Type'], 'application/json');
+  assert.ok(sent >= 1); assert.ok(!push.hasApp(token('b')), 'gone app token removed'); assert.ok(push.hasApp(token('a')));
+  push.unsubscribeApp(token('a')); assert.ok(!push.hasApp(token('a')));
+});

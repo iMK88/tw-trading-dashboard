@@ -4,8 +4,9 @@
 export const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const toDataURL = blob => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => reject(new Error('圖片讀取失敗')); r.readAsDataURL(blob); });
 
-// 回傳 'download'（已下載）或 'sheet'（已顯示 iOS 儲存預覽）
+// 回傳 'download'（已下載）、'sheet'（已顯示 iOS 儲存預覽），或在商店版 App 中由 App 處理：'saved'（已存到相簿）／'shared'（已開分享選單）
 export async function saveImage(blob, filename) {
+  if (typeof window.__equilensSaveImage === 'function') return window.__equilensSaveImage(blob, filename); // 手機版 native.js 在 App 內設定
   if (!isIOS()) {
     const url = URL.createObjectURL(blob), a = document.createElement('a');
     a.href = url; a.download = filename; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000);

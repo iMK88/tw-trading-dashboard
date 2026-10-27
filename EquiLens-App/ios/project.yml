@@ -1,0 +1,76 @@
+# 衡析 App（iOS）的 Xcode 專案定義。在 Mac 上執行 `brew install xcodegen && xcodegen` 產生 EquiLens.xcodeproj（產生的專案不放進版本庫）。
+# 發行設定（套件 ID、開發團隊、推播中繼網址）寫在 Config.xcconfig，可用 Local.xcconfig 或 xcodebuild 參數覆寫。
+name: EquiLens
+options:
+  deploymentTarget:
+    iOS: "16.4"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config.xcconfig
+  Release: Config.xcconfig
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    majorVersion: 12.0.0
+targets:
+  EquiLens:
+    type: application
+    platform: iOS
+    sources:
+      - path: EquiLens
+        excludes:
+          - "**/.gitkeep"
+      # App 內建的網頁：連線頁、示意模式用的手機版畫面（與 EquiLens-Pocket/public 相同）、示意資料
+      - path: ../web/launcher
+        type: folder
+        buildPhase: resources
+      - path: ../web/demo
+        type: folder
+        buildPhase: resources
+      - path: ../../EquiLens-Pocket/public
+        type: folder
+        buildPhase: resources
+      # Firebase 推播：把 Firebase 專案的 GoogleService-Info.plist 放在 EquiLens 資料夾才會啟用
+      - path: EquiLens/GoogleService-Info.plist
+        optional: true
+        buildPhase: resources
+    dependencies:
+      - package: Firebase
+        product: FirebaseMessaging
+    entitlements:
+      path: EquiLens/EquiLens.entitlements
+      properties:
+        aps-environment: $(APS_ENVIRONMENT)
+    info:
+      path: EquiLens/Info.plist
+      properties:
+        CFBundleDisplayName: EquiLens
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, zh-Hant]
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIStatusBarStyle: UIStatusBarStyleLightContent
+        EquiLensRelayURL: $(EQUILENS_RELAY_URL)
+        NSPhotoLibraryAddUsageDescription: Save EquiLens report cards to Photos
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(EQUILENS_BUNDLE_ID)
+        PRODUCT_NAME: EquiLens
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production

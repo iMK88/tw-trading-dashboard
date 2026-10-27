@@ -3,6 +3,7 @@ import { renderFlowCards, downloadFlowCard } from './flow-cards.js';
 import { initChips, loadChips, brokersView, holdersView } from './chips.js';
 import { initLive, livePage, loadLiveTab, reportCard, replayActive, replayPage, mountReplay, stockExtrasShell, fillStockExtras, liveState, newsSettingsCard, IOS, rulesCard, openQuote, openIndex, idlePane, repaintPane } from './live.js';
 import { docked, layout, onLayout, setLayoutPref, layoutPref, setPaneHidden, paneHiddenNow } from './layout.js';
+import { APP, APP_PLATFORM, appCall, appInfo } from './native.js';
 import { setLanguage, getLanguage, tx } from './i18n.js';
 import * as MK from './market.js';
 
@@ -68,7 +69,7 @@ const ICON = { pane: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="
 const svg = p => `<svg viewBox="0 0 24 24" aria-hidden="true">${p}</svg>`;
 function shell() {
   document.body.innerHTML = `<header class="appbar"><button class="iconbtn menu" id="settings" aria-label="設定">${svg(ICON.menu)}</button><h1 id="title"></h1><button class="iconbtn" id="pane-toggle" aria-label="顯示或收合副頁" title="顯示或收合副頁">${svg(ICON.pane)}</button><button class="iconbtn" id="refresh" aria-label="重新整理">${svg(ICON.refresh)}</button><button class="iconbtn" id="theme" aria-label="切換深淺色">${svg(ICON.theme)}</button></header>
-  <main id="main"></main>
+  ${appI?.demo ? '<div class="demo-bar"><span>示意模式：畫面為示意資料，無法查詢或變更設定</span><button data-app-launcher>連線到我的衡析</button></div>' : ''}<main id="main"></main>
   <nav class="tabbar" aria-label="主要分頁">${tabsNow().map(([k, l, i]) => `<button class="tab" data-tab="${k}" aria-label="${l}">${svg(i)}<span>${l}</span></button>`).join('')}</nav>
   <div class="sheet-backdrop" id="backdrop"></div><section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><div class="grab"></div><div class="sheet-h"><h2 id="sheet-title"></h2><button class="iconbtn" data-close-sheet aria-label="關閉">${svg(ICON.close)}</button></div><div class="sheet-b" id="sheet-body"></div></section>
   <div id="toast" role="status" aria-live="polite"></div>`;
@@ -500,7 +501,7 @@ function instPage() {
 // 衡析 App 圖示：深墨圓角方形＋電光青六角形（與 icon.svg 相同，由 tools/make-icons.mjs 產生）
 const LOGO = `<svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#07101C"/><polygon points="50,23.6 72.86,36.8 72.86,63.2 50,76.4 27.14,63.2 27.14,36.8" fill="#2EE6FF" stroke="#2EE6FF" stroke-width="6.6" stroke-linejoin="round"/><polyline points="35.48,61.22 46.04,50 53.96,56.6 65.84,39.44" fill="none" stroke="#07101C" stroke-width="5.94" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 function showLogin() {
-  document.body.innerHTML = `<form class="login" id="login">${LOGO}<h1>衡析 Pocket</h1><p>台股研究戰情室 · 手機版</p><label class="sr" for="pw">密碼</label><input id="pw" type="password" autocomplete="current-password" placeholder="輸入密碼" required minlength="10"><button class="btn primary" type="submit">登入</button><div class="err" id="login-err" role="alert"></div><div class="foot">登入後此裝置可保持 30 天。<br>密碼在電腦上執行「設定手機密碼.cmd」設定。</div></form><div id="toast"></div>`;
+  document.body.innerHTML = `<form class="login" id="login">${LOGO}<h1>衡析 Pocket</h1><p>台股研究戰情室 · 手機版</p><label class="sr" for="pw">密碼</label><input id="pw" type="password" autocomplete="current-password" placeholder="輸入密碼" required minlength="10"><button class="btn primary" type="submit">登入</button><div class="err" id="login-err" role="alert"></div><div class="foot">登入後此裝置可保持 30 天。<br>密碼在電腦上執行「設定手機密碼.cmd」設定。</div>${APP ? '<button class="btn" type="button" data-app-launcher style="margin-top:14px">切換伺服器／示意模式</button>' : ''}</form><div id="toast"></div>`;
   $('#pw').focus();
 }
 function showSetup(msg) { document.body.innerHTML = `<div class="login">${LOGO}<h1>尚未完成設定</h1><p>${esc(msg)}</p></div>`; }
@@ -517,6 +518,7 @@ document.addEventListener('click', async e => {
   const ds = b.dataset;
   try {
     if ('reload' in ds) return location.reload();
+    if ('appLauncher' in ds) return appCall('launcher'); // 商店版 App：回到連線頁（切換伺服器或示意模式）
     if (ds.tab) return setTab(ds.tab);
     if (ds.fview) { S.flows.view = ds.fview; draw(); return load(); }
     if (b.id === 'refresh') { if (S.tab === 'heat' && !(S.heat.live && liveOpen())) await loadHeat(S.heat.data?.date); return load(S.tab !== 'heat'); }
@@ -583,9 +585,10 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && Da
 
 /* ---------- 螢幕恆亮（Screen Wake Lock）：App 在前景時保持螢幕不熄滅，切到背景自動釋放、回來再取得 ---------- */
 let wakeLock = null;
-const wakeSupported = () => 'wakeLock' in navigator;
+const wakeSupported = () => APP || 'wakeLock' in navigator; // 商店版 App 由 App 保持螢幕開啟
 const wakePref = () => { try { return localStorage.getItem('pocket.wake') === '1'; } catch { return false; } };
 async function applyWake() {
+  if (APP) { const on = wakePref(); await appCall('keepAwake', { on }).catch(() => { }); wakeLock = on ? { app: true } : null; return refreshWakeStatus(); }
   if (!wakeSupported()) return;
   if (wakePref() && document.visibilityState === 'visible') {
     if (!wakeLock) { try { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; refreshWakeStatus(); }); } catch { wakeLock = null; } }
@@ -606,15 +609,22 @@ function openSettings() {
   const theme = document.documentElement.dataset.theme, perm = 'Notification' in window ? Notification.permission : 'unsupported';
   const push = liveState.push?.state;
   openSheet('設定', `<section class="card"><div class="card-b" style="padding-top:14px">
-      <div class="lv-rule"><label class="lv-sw"><input type="checkbox" id="wake-toggle" ${wakePref() ? 'checked' : ''} ${wakeSupported() ? '' : 'disabled'}><span></span></label><div><b>螢幕恆亮</b><small>開著衡析時螢幕不會自動熄滅，適合盤中盯看板或熱浪圖；切到其他 App 或鎖定後自動恢復正常。較耗電。${IOS ? '從主畫面圖示開啟時需 iOS 18.4 以上才有效。' : ''}</small><small>狀態：<span id="wake-status"></span></small></div></div>
+      <div class="lv-rule"><label class="lv-sw"><input type="checkbox" id="wake-toggle" ${wakePref() ? 'checked' : ''} ${wakeSupported() ? '' : 'disabled'}><span></span></label><div><b>螢幕恆亮</b><small>開著衡析時螢幕不會自動熄滅，適合盤中盯看板或熱浪圖；切到其他 App 或鎖定後自動恢復正常。較耗電。${IOS && !APP ? '從主畫面圖示開啟時需 iOS 18.4 以上才有效。' : ''}</small><small>狀態：<span id="wake-status"></span></small></div></div>
       <div class="lv-rule"><div style="flex:1"><b>外觀</b><div class="seg" style="margin-top:8px">${[['dark', '深色'], ['light', '淺色']].map(([v, l]) => `<button class="${theme === v ? 'on' : ''}" data-set-theme="${v}">${l}</button>`).join('')}</div></div></div>
       <div class="lv-rule"><div style="flex:1"><b>版面</b><small>自動：展開的摺疊手機、平板或橫向時分成左右兩頁（左邊清單、右邊走勢與五檔），直向展開時分成上下兩頁（可半摺立在桌上看盤）；一般手機與摺疊手機的封面螢幕維持單頁。</small><div class="seg" style="margin-top:8px">${[['auto', '自動'], ['split', '左右雙頁'], ['stack', '上下雙頁'], ['phone', '單頁']].map(([v, l]) => `<button class="${layoutPref() === v ? 'on' : ''}" data-set-layout="${v}">${l}</button>`).join('')}</div><small>目前：${esc(layoutText())}</small></div></div>
       <div class="lv-rule"><div style="flex:1"><b>字型大小</b><small>調整整個 App 的文字大小，立即套用。</small><div class="seg" style="margin-top:8px">${FONT_SIZES.map(([v, l]) => `<button class="${fontSize() === v ? 'on' : ''}" data-set-font="${v}">${l}</button>`).join('')}</div></div></div>
     </div></section>
+    ${appI ? `<section class="card"><div class="card-h"><h2>📱 衡析 App</h2></div><div class="card-b"><p class="set-p">連線到：<b>${appI.demo ? '示意模式（示意資料）' : esc(appI.server || '—')}</b><br><span class="muted">App 版本 ${esc(appI.version || '—')}</span></p><button class="btn block" data-app-launcher>切換伺服器／示意模式</button></div></section>` : ''}
     ${newsSettingsCard()}
     <section class="card"><div class="card-h"><h2>🔔 通知與音效</h2></div><div class="card-b">
       <p class="set-p">通知狀態：<b>${push === 'on' ? '已開啟' : perm === 'denied' ? '已封鎖' : '未開啟'}</b>　<button class="btn" data-goto-push style="min-height:34px;padding:0 12px">${push === 'on' ? '測試／管理' : '前往開啟'}</button></p>
-      ${IOS ? `<p class="set-p">iPhone／iPad 需從<b>主畫面的「衡析」圖示</b>開啟才能收通知（iOS 16.4 以上；在 Safari 按「分享」→「加入主畫面」）。通知使用 iPhone 的預設提示音，網頁 App 無法另選音效：</p>
+      ${APP ? (APP_PLATFORM === 'ios' ? `<p class="set-p">通知使用 iPhone 的提示音：</p>
+      <ol class="set-steps"><li>開啟 iPhone「設定」→「通知」→ 找到 <b>衡析</b></li><li>打開「<b>允許通知</b>」，並開啟「<b>聲音</b>」與「<b>橫幅</b>」</li><li>回到衡析，按「盤中 → 雷達 → 發送測試」確認</li></ol>
+      <p class="set-p muted">專注模式或勿擾模式下不會響鈴；可在「設定 → 專注模式」把衡析加入允許的 App。</p>`
+      : `<p class="set-p">可以在手機設定替衡析指定提示音：</p>
+      <ol class="set-steps"><li>開啟手機「設定」→「應用程式」→ 選 <b>衡析</b> →「通知」</li><li>點「<b>衡析通知</b>」類別，選「<b>提醒</b>」（不要選靜音），再點「<b>聲音</b>」挑選音效，也可以開啟震動</li><li>回到衡析，按「盤中 → 雷達 → 發送測試」試聽</li></ol>
+      <p class="set-p muted">勿擾模式下不會響鈴。</p>`)
+      : IOS ? `<p class="set-p">iPhone／iPad 需從<b>主畫面的「衡析」圖示</b>開啟才能收通知（iOS 16.4 以上；在 Safari 按「分享」→「加入主畫面」）。通知使用 iPhone 的預設提示音，網頁 App 無法另選音效：</p>
       <ol class="set-steps"><li>開啟 iPhone「設定」→「通知」→ 找到 <b>衡析</b></li><li>打開「<b>允許通知</b>」，並開啟「<b>聲音</b>」與「<b>橫幅</b>」（鎖定畫面、通知中心也一併勾選）</li><li>回到衡析，按「盤中 → 雷達 → 發送測試」確認</li></ol>
       <p class="set-p muted">專注模式或勿擾模式下不會響鈴；可在「設定 → 專注模式」把衡析加入允許的 App。</p>`
       : `<p class="set-p">通知會使用手機的系統提示音。網頁 App 無法自帶音效，但可以在三星設定中替衡析指定任何內建音效：</p>
@@ -640,9 +650,12 @@ initChips({ api, toast, draw, S });
 function openChips(view) { S.flows.view = view; if (S.tab === 'flows') { draw(); load(); } else setTab('flows'); }
 // Nexus 的研究市場、介面語言、漲跌配色與可用功能
 function applyProfile(p) { if (!p) return; S.profile = p; MK.setMarket(p.market, p.upColor, p.language); if (p.language && p.language !== getLanguage()) setLanguage(p.language); }
+// 商店版 App 的資訊（連線網址、示意模式、版本）；一般瀏覽器為 null
+let appI = null;
 async function start() {
+  if (APP) appI = await appInfo();
   try { const h = await (await fetch('/health', { cache: 'no-store' })).json(); if (h.lang && h.lang !== getLanguage()) await setLanguage(h.lang); } catch { }
-  let me; try { me = await api('auth/me'); applyProfile(me.profile); } catch (e) { if (!e.silent) { document.body.innerHTML = `<div class="login">${LOGO}<h1>無法連線</h1><p>${esc(e.message)}</p><button class="btn primary" data-reload>重試</button></div>`; } return; }
+  let me; try { me = await api('auth/me'); applyProfile(me.profile); } catch (e) { if (!e.silent) { document.body.innerHTML = `<div class="login">${LOGO}<h1>無法連線</h1><p>${esc(e.message)}</p><button class="btn primary" data-reload>重試</button>${APP ? '<button class="btn" data-app-launcher style="margin-top:10px">切換伺服器／示意模式</button>' : ''}</div>`; } return; }
   shell(); setTab((location.hash || '#brief').slice(1), false); history.replaceState({ tab: S.tab }, '', '#' + S.tab);
   syncSheet(); idlePane();
 }

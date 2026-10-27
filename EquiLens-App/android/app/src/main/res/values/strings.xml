@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EquiLens</string>
+    <string name="channel_name">EquiLens alerts</string>
+    <string name="channel_desc">Intraday radar, custom alerts, news, AI report and chip tracking</string>
+    <string name="cannot_connect">Cannot reach %1$s. Make sure the computer is on and EquiLens is running.</string>
+    <string name="invalid_url">Enter an https:// address</string>
+    <string name="not_pocket">%1$s is not an EquiLens Pocket address, or it cannot be reached right now.</string>
+    <string name="save_failed">Could not save the image</string>
+    <string name="demo_readonly">Demo mode cannot change settings or query new data</string>
+    <string name="demo_missing">Demo mode has no data for this</string>
+</resources>

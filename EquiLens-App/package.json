@@ -1,0 +1,14 @@
+{
+  "name": "equilens-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "EquiLens store apps (Android / iOS shells), push relay and store assets",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs relay/test/*.test.mjs",
+    "record-demo": "node tools/record-demo.mjs",
+    "store-assets": "node tools/store-assets.mjs"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,56 @@
+# 衡析 App（iOS）：在 GitHub 的 Mac 主機以 Xcode 26 建置。每次都先編譯模擬器版本確認程式正確；
+# 設定了 App Store Connect API 金鑰時，再封存、簽署並上傳到 App Store Connect（TestFlight）。手動執行或推送 app-v* 標籤時觸發。
+# 秘密：APPLE_TEAM_ID、ASC_KEY_ID、ASC_ISSUER_ID、ASC_KEY_P8_BASE64（App Store Connect API 金鑰，角色 App Manager 以上）
+#       GOOGLE_SERVICE_INFO_PLIST_BASE64：Firebase 的 GoogleService-Info.plist（沒有時 App 沒有推播）
+# 變數：EQUILENS_RELAY_URL（推播中繼網址）、EQUILENS_BUNDLE_ID（套件 ID，預設 io.github.wakin61043.equilens）
+name: App · iOS
+on:
+  workflow_dispatch:
+    inputs:
+      version_name: { description: '版本名稱（例如 1.0.0）', required: false, default: '' }
+  push:
+    tags: ['app-v*']
+jobs:
+  build:
+    runs-on: macos-15
+    defaults: { run: { shell: bash, working-directory: EquiLens-App/ios } }
+    env:
+      HAS_ASC: ${{ secrets.ASC_KEY_P8_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with: { xcode-version: '26' }
+      - name: 準備設定與秘密
+        env:
+          GSINFO: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
+          RELAY: ${{ vars.EQUILENS_RELAY_URL }}
+          BUNDLE: ${{ vars.EQUILENS_BUNDLE_ID }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          VERSION: ${{ inputs.version_name || github.ref_name }}
+        run: |
+          brew install xcodegen
+          if [ -n "$GSINFO" ]; then echo "$GSINFO" | base64 -d > EquiLens/GoogleService-Info.plist; fi
+          {
+            [ -n "$BUNDLE" ] && echo "EQUILENS_BUNDLE_ID = $BUNDLE"
+            [ -n "$TEAM" ] && echo "DEVELOPMENT_TEAM = $TEAM"
+            [ -n "$RELAY" ] && echo "EQUILENS_RELAY_URL = ${RELAY/\/\//\/\$()\/}"
+            V="${VERSION#app-v}"; [[ "$V" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] && echo "MARKETING_VERSION = $V"
+            echo "CURRENT_PROJECT_VERSION = ${{ github.run_number }}"
+          } > Local.xcconfig
+          cat Local.xcconfig
+          xcodegen
+      - name: 編譯（模擬器，不簽署）
+        run: xcodebuild -project EquiLens.xcodeproj -scheme EquiLens -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build | tail -40
+      - name: 封存並上傳到 App Store Connect
+        if: env.HAS_ASC == 'true'
+        env:
+          ASC_KEY: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          echo "$ASC_KEY" | base64 -d > "$RUNNER_TEMP/AuthKey.p8"
+          AUTH="-allowProvisioningUpdates -authenticationKeyPath $RUNNER_TEMP/AuthKey.p8 -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          xcodebuild -project EquiLens.xcodeproj -scheme EquiLens -configuration Release -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/EquiLens.xcarchive" $AUTH archive | tail -40
+          /usr/libexec/PlistBuddy -c "Clear dict" -c "Add :method string app-store-connect" -c "Add :destination string upload" -c "Add :teamID string $TEAM" -c "Add :signingStyle string automatic" "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/EquiLens.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" $AUTH | tail -40

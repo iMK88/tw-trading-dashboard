@@ -1,0 +1,7 @@
+EquiLens.xcodeproj/
+build/
+DerivedData/
+Local.xcconfig
+EquiLens/GoogleService-Info.plist
+*.p8
+*.mobileprovision

@@ -82,6 +82,12 @@ the bottom page. Where the browser reports the fold (Viewport Segments API), the
 
 ![iPhone Duo unfolded: live board on the left, chart and order book on the right](docs/images/foldable-split.webp)
 
+**Store apps (Google Play / App Store)** – native Android and iOS shells (`EquiLens-App/`) that connect to your own
+EquiLens Pocket. They add native push notifications delivered through Firebase via a small relay (a Cloudflare Worker
+that stores nothing), saving cards to Photos, keep-screen-on, and a demo mode with synthetic sample data that works
+without a computer. Build, signing and store-submission steps, store texts, privacy answers and screenshots are in
+[EquiLens-App/README.md](EquiLens-App/README.md) (zh-TW); privacy policy: [docs/PRIVACY.md](docs/PRIVACY.md).
+
 ## Markets and data sources
 
 One EquiLens instance researches one market at a time. Trading hours (including lunch breaks), time zone, tick

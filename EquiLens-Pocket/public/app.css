@@ -533,3 +533,7 @@ html[data-layout=stack][data-pane=on] .sheet-b .hero .meta{width:100%;margin-top
 html[data-layout=stack][data-pane=on] .sheet-b .hero .meta br{display:none}
 .m-sep{display:none}html[data-layout=stack][data-pane=on] .sheet-b .m-sep{display:inline}
 html[data-layout=stack][data-pane=on] .sheet-b [data-chart]>.statusline,html[data-layout=stack][data-pane=on] .sheet-b [data-index-view]>.statusline{margin-bottom:6px}
+
+/* ---------- 商店版 App：示意模式提示列 ---------- */
+.demo-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 14px;font-size:.8rem;color:var(--text);background:color-mix(in srgb,var(--amber) 16%,var(--surface));border-bottom:1px solid color-mix(in srgb,var(--amber) 40%,transparent)}
+.demo-bar button{flex:none;min-height:34px;padding:0 12px;border-radius:10px;background:var(--amber);color:#1a1204;font-weight:700;font-size:.8rem}

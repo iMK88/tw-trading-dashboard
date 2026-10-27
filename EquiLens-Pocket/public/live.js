@@ -4,6 +4,7 @@ import { tx } from './i18n.js';
 import { intradaySVG, readAt, legendHTML, bookHTML, tapeHTML } from './intraday.js';
 import * as MK from './market.js';
 import { docked, layout } from './layout.js';
+import { APP, APP_PLATFORM, appCall, appInfo, onAppEvent } from './native.js';
 
 let C = null; // { api, toast, draw, S, openSheet, openStock, inScope, aggregate, renderTreemap, heatColor, $, setSel }
 const pref = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } }, savePref = (k, v) => { try { localStorage.setItem(k, v); } catch { } };
@@ -12,7 +13,8 @@ export const liveState = L;
 // 平台：iPhone／iPad（含 iPadOS 桌面版 UA）與是否從主畫面圖示開啟（iOS 只有主畫面 App 能收推播）
 export const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 export const STANDALONE = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-const pushHelp = state => state === 'unsupported'
+const pushHelp = state => APP ? (state === 'unsupported' ? '這個版本的衡析 App 無法使用推播通知。' : APP_PLATFORM === 'ios' ? '通知權限已關閉，請到 iPhone「設定 → 通知 → 衡析」打開「允許通知」。' : '通知權限已關閉，請到手機「設定 → 應用程式 → 衡析 → 通知」開啟。')
+  : state === 'unsupported'
   ? IOS ? STANDALONE ? '這支 iPhone 的系統版本不支援網頁推播，請更新到 iOS 16.4 以上。' : 'iPhone／iPad 要先加入主畫面才能收通知：用 Safari 開啟衡析手機版的網址 →「分享」→「加入主畫面」，再從主畫面的「衡析」圖示開啟，回到這裡按「開啟通知」（需 iOS 16.4 以上）。'
     : '這個瀏覽器不支援推播。請用 Chrome 安裝到主畫面的 App 開啟。'
   : IOS ? '通知權限已關閉，請到 iPhone「設定 → 通知 → 衡析」打開「允許通知」。' : '通知權限被封鎖，請到手機設定 → 應用程式 → Chrome（或此 App）→ 通知 開啟。';
@@ -332,7 +334,28 @@ async function saveNews(patch) {
 
 /* ---------- 推播 ---------- */
 const b64ToU8 = s => { const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - s.length % 4) % 4)); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+// 商店版 App：推播 token 由 App 取得（FCM），登記到電腦上的衡析，通知經 App 內建的推播中繼送達
+async function checkAppPush() {
+  try {
+    const i = await appInfo(); if (!i?.pushAvailable) { L.push = { state: 'unsupported', count: 0 }; return; }
+    const r = await appCall('pushToken', { prompt: false });
+    const k = await C.api('api/push/key' + (r?.token ? '?token=' + encodeURIComponent(r.token) : ''));
+    L.push = { state: r?.token && k.subscribed ? 'on' : r?.permission === 'denied' ? 'denied' : 'off', count: k.count };
+  } catch { L.push = { state: 'off', count: 0 }; }
+}
+async function enableAppPush() {
+  const i = await appInfo(), r = await appCall('pushToken', { prompt: true });
+  if (!r?.token) { await checkAppPush(); throw new Error(r?.permission === 'denied' ? '沒有取得通知權限' : '無法取得推播代碼，請稍後再試'); }
+  await C.api('api/push/app-subscribe', { token: r.token, platform: APP_PLATFORM, relay: i.relay });
+  await checkAppPush();
+}
+// 推播 token 更換時（FCM 偶爾會更新）：已開啟通知就改登記新的 token
+if (APP) onAppEvent('pushToken', async d => {
+  if (L.push.state !== 'on' || !d?.token || !C) return;
+  try { const i = await appInfo(); if (d.old) await C.api('api/push/app-unsubscribe', { token: d.old }); await C.api('api/push/app-subscribe', { token: d.token, platform: APP_PLATFORM, relay: i.relay }); } catch { }
+});
 async function checkPush() {
+  if (APP) return checkAppPush();
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) { L.push = { state: 'unsupported', count: 0 }; return; }
   if (Notification.permission === 'denied') { L.push = { state: 'denied', count: 0 }; return; }
   try {
@@ -342,6 +365,7 @@ async function checkPush() {
   } catch { L.push = { state: 'off', count: 0 }; }
 }
 async function enablePush() {
+  if (APP) return enableAppPush();
   // iPhone Safari 規定通知權限必須在點擊當下直接請求，前面不能先 await 其他動作，否則不會跳出詢問
   const perm = await Notification.requestPermission(); if (perm !== 'granted') { await checkPush(); throw new Error('沒有取得通知權限'); }
   const reg = await navigator.serviceWorker.register('/sw.js'); await navigator.serviceWorker.ready;
@@ -351,8 +375,10 @@ async function enablePush() {
   await C.api('api/push/subscribe', { subscription: sub.toJSON() });
   await checkPush();
 }
-async function disablePush() { const reg = await navigator.serviceWorker.getRegistration('/'), sub = await reg?.pushManager.getSubscription(); if (sub) { await C.api('api/push/unsubscribe', { endpoint: sub.endpoint }); await sub.unsubscribe(); } await checkPush(); }
-if ('serviceWorker' in navigator) {
+async function disablePush() {
+  if (APP) { const r = await appCall('pushToken', { prompt: false }).catch(() => null); if (r?.token) await C.api('api/push/app-unsubscribe', { token: r.token }); return checkAppPush(); }
+  const reg = await navigator.serviceWorker.getRegistration('/'), sub = await reg?.pushManager.getSubscription(); if (sub) { await C.api('api/push/unsubscribe', { endpoint: sub.endpoint }); await sub.unsubscribe(); } await checkPush(); }
+if ('serviceWorker' in navigator && !APP) {
   navigator.serviceWorker.register('/sw.js').catch(() => { });
   navigator.serviceWorker.addEventListener('message', e => { if (e.data?.type === 'open') { const h = new URL(e.data.url).hash; if (h && h !== location.hash) location.hash = h; } });
 }
@@ -469,7 +495,7 @@ document.addEventListener('click', async e => {
     if (ds.push === 'test') { const r = await C.api('api/push/test', {}); C.toast(r.sent ? '測試通知已送出' : '沒有可送達的裝置'); return; }
     if (ds.rscope && L.draft) { L.draft.radar.scope = ds.rscope; return C.draw(); }
     if ('rsave' in ds && L.draft) { await C.api('api/monitor/settings', L.draft); await loadMonitor(); C.toast('雷達設定已儲存'); return C.draw(); }
-    if ('rcard' in ds && L.report?.report) { b.disabled = true; const old = b.textContent; b.textContent = '繪製中…'; try { const [{ downloadReportCard }, data] = await Promise.all([import('./report-card.js'), C.api('api/report/card?date=' + L.report.report.date)]); if (await downloadReportCard(data) === 'download') C.toast('已下載圖卡，可在相簿的「Download／下載」找到'); } finally { b.disabled = false; b.textContent = old; } return; }
+    if ('rcard' in ds && L.report?.report) { b.disabled = true; const old = b.textContent; b.textContent = '繪製中…'; try { const [{ downloadReportCard }, data] = await Promise.all([import('./report-card.js'), C.api('api/report/card?date=' + L.report.report.date)]); const how = await downloadReportCard(data); if (how === 'download') C.toast('已下載圖卡，可在相簿的「Download／下載」找到'); else if (how === 'saved') C.toast('圖卡已存到相簿'); } finally { b.disabled = false; b.textContent = old; } return; }
     if ('rgen' in ds) { if (!confirm(tx('使用推理模型產生今日盤後日報？可能產生少量 API 費用。'))) return; await C.api('api/report/generate', {}); await loadReport(); C.toast('AI 開始撰寫日報，完成後會推播通知'); return C.draw(); }
     if ('replayOpen' in ds) { b.disabled = true; try { await openReplay(); } finally { b.disabled = false; } return; }
     if ('rpclose' in ds) { setPlaying(false); L.replay = null; return C.draw(); }

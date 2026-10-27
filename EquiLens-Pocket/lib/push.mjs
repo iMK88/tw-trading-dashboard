@@ -1,5 +1,6 @@
 // Web Push（RFC 8291 aes128gcm 加密 + RFC 8292 VAPID 簽章），只用 Node 內建 crypto。
 // 金鑰與訂閱保存在 .local/push.json；手機在 App 內按「開啟通知」後才會建立訂閱。
+// 商店版 App（Android／iOS）不支援 Web Push：App 把推播 token 與推播中繼網址登記到這裡，通知經中繼以 FCM 送達（apps）。
 import crypto from 'node:crypto';
 import { read, write } from './storage.mjs';
 import { tx, t } from '../public/i18n.js';
@@ -57,19 +58,41 @@ export function subscribe(sub, ua = '', origin = '') {
   save(s); return s.subs.length;
 }
 export function unsubscribe(endpoint) { const s = store(); s.subs = s.subs.filter(x => x.endpoint !== endpoint); save(s); }
-export const subscriptionCount = () => store().subs.length;
+export const subscriptionCount = () => store().subs.length + (store().apps || []).length;
 export const hasSubscription = endpoint => store().subs.some(x => x.endpoint === endpoint);
+
+// 商店版 App：token 為 FCM 註冊 token；relay 為 App 內建的推播中繼網址（只接受公開的 https 網域）
+export const APP_PLATFORMS = new Set(['android', 'ios']);
+const publicHttps = u => { try { const x = new URL(u); return x.protocol === 'https:' && !x.username && !x.password && /\.[a-z]{2,}$/i.test(x.hostname) && !/(^|\.)localhost$|\.local$|\.internal$/i.test(x.hostname) && u.length < 300; } catch { return false; } };
+export const validApp = a => !!a && typeof a.token === 'string' && /^[\w:.-]{20,4096}$/.test(a.token) && APP_PLATFORMS.has(a.platform) && publicHttps(a.relay);
+export function subscribeApp(app, ua = '') {
+  if (!validApp(app)) throw Object.assign(new Error('推播訂閱格式錯誤'), { status: 400 });
+  const s = store(); s.apps = (s.apps || []).filter(x => x.token !== app.token);
+  s.apps.push({ token: app.token, platform: app.platform, relay: app.relay, ua: String(ua).slice(0, 120), createdAt: new Date().toISOString() });
+  if (s.apps.length > 10) s.apps = s.apps.slice(-10);
+  save(s); return subscriptionCount();
+}
+export function unsubscribeApp(token) { const s = store(); s.apps = (s.apps || []).filter(x => x.token !== token); save(s); }
+export const hasApp = token => (store().apps || []).some(x => x.token === token);
+// 送到推播中繼：{ token, platform, title, body, tag, url }；中繼回 404／410 代表 token 已失效
+async function sendApp(app, message, fetcher) {
+  const res = await fetcher(app.relay, { method: 'POST', signal: AbortSignal.timeout(15000), headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: app.token, platform: app.platform, title: String(message.title || '').slice(0, 200), body: String(message.body || '').slice(0, 1500), tag: String(message.tag || '').slice(0, 100), url: String(message.url || '/').slice(0, 500) }) });
+  return res.status;
+}
 
 export async function sendToAll(message, { fetcher = fetch } = {}) {
   const s = store(), payload = JSON.stringify(message).slice(0, 3000), gone = new Set();
   let sent = 0;
-  await Promise.all(s.subs.map(async sub => {
+  await Promise.all([...s.subs.map(async sub => {
     try {
       const res = await fetcher(sub.endpoint, { method: 'POST', signal: AbortSignal.timeout(15000), headers: { TTL: '3600', Urgency: 'high', 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', Authorization: vapidAuthorization(sub.endpoint, s.vapid, Date.now(), subject(s)) }, body: encryptPayload(payload, sub.keys) });
       if (res.status === 404 || res.status === 410) gone.add(sub.endpoint); else if (res.ok) sent++;
     } catch { }
-  }));
-  if (gone.size) { const now = store(); now.subs = now.subs.filter(x => !gone.has(x.endpoint)); save(now); }
+  }), ...(s.apps || []).map(async app => {
+    try { const st = await sendApp(app, message, fetcher); if (st === 404 || st === 410) gone.add(app.token); else if (st >= 200 && st < 300) sent++; } catch { }
+  })]);
+  if (gone.size) { const now = store(); now.subs = now.subs.filter(x => !gone.has(x.endpoint)); now.apps = (now.apps || []).filter(x => !gone.has(x.token)); save(now); }
   return sent;
 }
 export const lastSeq = () => store().lastSeq || 0;

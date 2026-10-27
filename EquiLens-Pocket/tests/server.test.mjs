@@ -98,6 +98,13 @@ test('API requires setup, then login; login is rate limited and CSRF-checked', a
   assert.equal((await post('/m/api/news', { id: '../x' }, C)).status, 400);
   assert.equal((await post('/m/api/news', { id: 'x y' }, C)).status, 400);
   assert.equal((await post('/m/api/cancel', {}, C)).status, 200);
+  // 商店版 App 推播：登記 FCM token 與推播中繼網址；格式錯誤或內網網址拒絕
+  const appTok = 'fcm-test:' + 'B'.repeat(150);
+  assert.equal((await post('/m/api/push/app-subscribe', { token: appTok, platform: 'android', relay: 'https://relay.example.workers.dev/v1/send' }, C)).status, 200);
+  assert.equal((await req('/m/api/push/key?token=' + encodeURIComponent(appTok), { headers: C })).json.subscribed, true);
+  assert.equal((await post('/m/api/push/app-subscribe', { token: appTok, platform: 'android', relay: 'https://127.0.0.1/v1' }, C)).status, 400);
+  assert.equal((await post('/m/api/push/app-unsubscribe', { token: appTok }, C)).status, 200);
+  assert.equal((await req('/m/api/push/key?token=' + encodeURIComponent(appTok), { headers: C })).json.subscribed, false);
   assert.ok(calls.filter(c => ['/api/update', '/api/pattern-update', '/api/news', '/api/cancel'].includes(c.url)).every(c => c.csrf === 'csrf-1'), 'writes carry Nexus CSRF');
   assert.equal((await post('/m/api/settings', { interval: 1000 }, C)).status, 404, 'settings stay PC-only');
   r = await req('/m/api/report/card?date=2026-10-01', { headers: C }); assert.equal(r.status, 200); assert.equal(r.json.index.twse.close, 48353.49); assert.equal(r.json.url, '/api/report/card?date=2026-10-01');

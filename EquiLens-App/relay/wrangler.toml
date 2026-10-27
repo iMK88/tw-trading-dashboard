@@ -1,0 +1,5 @@
+# 衡析推播中繼：npx wrangler deploy（部署前先 npx wrangler secret put FCM_SERVICE_ACCOUNT，貼上 Firebase 服務帳戶 JSON）
+name = "equilens-push-relay"
+main = "worker.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = true

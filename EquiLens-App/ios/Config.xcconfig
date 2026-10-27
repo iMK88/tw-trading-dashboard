@@ -1,0 +1,9 @@
+// 衡析 App（iOS）的發行設定；個人值寫在同資料夾的 Local.xcconfig（不放進版本庫），或在 xcodebuild 加參數覆寫
+// EQUILENS_BUNDLE_ID：套件 ID（上架後不能改）；DEVELOPMENT_TEAM：Apple 開發者團隊 ID；EQUILENS_RELAY_URL：推播中繼網址（空白＝這個版本沒有推播）
+EQUILENS_BUNDLE_ID = io.github.wakin61043.equilens
+MARKETING_VERSION = 1.0.0
+CURRENT_PROJECT_VERSION = 1
+DEVELOPMENT_TEAM =
+// xcconfig 中「//」是註解，網址要寫成 https:/$()/ 才不會被截斷
+EQUILENS_RELAY_URL =
+#include? "Local.xcconfig"

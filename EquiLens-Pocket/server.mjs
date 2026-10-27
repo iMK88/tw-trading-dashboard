@@ -20,7 +20,7 @@ const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/app.css': ['app.css', 'text/css; charset=utf-8'],
   '/heatmap.js': ['heatmap.js', 'text/javascript; charset=utf-8'], '/flow-cards.js': ['flow-cards.js', 'text/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'], '/icon.svg': ['icon.svg', 'image/svg+xml'],
-  '/sw.js': ['sw.js', 'text/javascript; charset=utf-8'], '/live.js': ['live.js', 'text/javascript; charset=utf-8'], '/chips.js': ['chips.js', 'text/javascript; charset=utf-8'], '/layout.js': ['layout.js', 'text/javascript; charset=utf-8'], '/intraday.js': ['intraday.js', 'text/javascript; charset=utf-8'], '/insight-ui.js': ['insight-ui.js', 'text/javascript; charset=utf-8'], '/report-card.js': ['report-card.js', 'text/javascript; charset=utf-8'], '/save-image.js': ['save-image.js', 'text/javascript; charset=utf-8'], '/i18n.js': ['i18n.js', 'text/javascript; charset=utf-8'], '/market.js': ['market.js', 'text/javascript; charset=utf-8'],  '/icon-192.png': ['icon-192.png', 'image/png'], '/badge-96.png': ['badge-96.png', 'image/png'], '/icon-512.png': ['icon-512.png', 'image/png'], '/apple-touch-icon.png': ['icon-192.png', 'image/png'],
+  '/sw.js': ['sw.js', 'text/javascript; charset=utf-8'], '/live.js': ['live.js', 'text/javascript; charset=utf-8'], '/chips.js': ['chips.js', 'text/javascript; charset=utf-8'], '/layout.js': ['layout.js', 'text/javascript; charset=utf-8'], '/native.js': ['native.js', 'text/javascript; charset=utf-8'], '/intraday.js': ['intraday.js', 'text/javascript; charset=utf-8'], '/insight-ui.js': ['insight-ui.js', 'text/javascript; charset=utf-8'], '/report-card.js': ['report-card.js', 'text/javascript; charset=utf-8'], '/save-image.js': ['save-image.js', 'text/javascript; charset=utf-8'], '/i18n.js': ['i18n.js', 'text/javascript; charset=utf-8'], '/market.js': ['market.js', 'text/javascript; charset=utf-8'],  '/icon-192.png': ['icon-192.png', 'image/png'], '/badge-96.png': ['badge-96.png', 'image/png'], '/icon-512.png': ['icon-512.png', 'image/png'], '/apple-touch-icon.png': ['icon-192.png', 'image/png'],
 };
 
 // 前端版本號：public 內檔案的修改時間雜湊（改了網頁檔即變更，手機 App 回到前景時會自動重新載入）
@@ -127,7 +127,7 @@ async function api(req, res, url) {
     if (route === 'chipwatch') { const date = q.get('date'); if (date && date !== 'latest' && !validDate(date)) throw Object.assign(new Error('日期格式錯誤'), { status: 400 }); return send(req, res, 200, await nexus.chipwatch(date)); }
     if (route === 'chipwatch/branches') { const k = String(q.get('q') || '').trim(); if (k.length > 30) throw Object.assign(new Error('資料格式錯誤'), { status: 400 }); return send(req, res, 200, await nexus.brokerSearch(k)); }
     if (route === 'holders/rank') { const scope = q.get('scope') || 'mine', date = q.get('date'); if (!['mine', 'market'].includes(scope) || (date && date !== 'latest' && !validDate(date))) throw Object.assign(new Error('資料格式錯誤'), { status: 400 }); return send(req, res, 200, await nexus.holderRank(scope, date)); }
-    if (route === 'push/key') return send(req, res, 200, { publicKey: push.publicKey(), count: push.subscriptionCount(), subscribed: q.get('endpoint') ? push.hasSubscription(q.get('endpoint')) : null });
+    if (route === 'push/key') return send(req, res, 200, { publicKey: push.publicKey(), count: push.subscriptionCount(), subscribed: q.get('endpoint') ? push.hasSubscription(q.get('endpoint')) : q.get('token') ? push.hasApp(q.get('token')) : null });
     if (route === 'job') { const { job: j = {}, busy } = await nexus.job(); return send(req, res, 200, { running: !!j.running, busy: !!busy, done: j.done || 0, total: j.total || 0, current: j.current || null, message: j.message || '', errors: (j.errors || []).length, finishedAt: j.finishedAt || null }); }
     if (route === 'patterns') { const p = await nexus.patterns(); return send(req, res, 200, { asOf: p.asOf, from: p.from, matched: p.matched, count: p.patternCount, eligible: p.eligible, rows: nexus.slimPatternRows(p) }); }
     if (route === 'pattern') {
@@ -177,6 +177,9 @@ async function api(req, res, url) {
     // 推播聯絡網址：手機開啟通知時所用的 https 網址（Nexus 設定了對外網址時以該網址為準）
     if (route === 'push/subscribe') return send(req, res, 200, { ok: true, count: push.subscribe(b.subscription, req.headers['user-agent'], isHttps(req) ? `https://${req.headers.host}` : '') });
     if (route === 'push/unsubscribe') { push.unsubscribe(String(b.endpoint || '')); return send(req, res, 200, { ok: true }); }
+    // 商店版 App：登記 FCM token 與 App 內建的推播中繼網址
+    if (route === 'push/app-subscribe') return send(req, res, 200, { ok: true, count: push.subscribeApp({ token: b.token, platform: b.platform, relay: b.relay }, req.headers['user-agent']) });
+    if (route === 'push/app-unsubscribe') { push.unsubscribeApp(String(b.token || '')); return send(req, res, 200, { ok: true }); }
     if (route === 'push/test') { const n = await push.sendToAll(push.localize({ title: '📡 衡析推播測試', body: '這台裝置已能收到盤中雷達與 AI 日報通知。', tag: 'test', url: '/#live' })); return send(req, res, 200, { ok: true, sent: n }); }
     if (route === 'flows/query') { if (!validDate(b.date)) throw Object.assign(new Error('日期格式錯誤'), { status: 400 }); const r = await nexus.flowsQuery(b.date); flowLatest = null; return send(req, res, 200, r); }
     if (route === 'watch') {

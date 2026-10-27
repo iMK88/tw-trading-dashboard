@@ -1,5 +1,6 @@
 // README 截圖：電腦版（http://127.0.0.1:4391）與手機版（http://127.0.0.1:4392），畫面為示意資料
 // Playwright 是全域安裝：PLAYWRIGHT=$(npm root -g)/playwright/index.mjs
+import { dayTradeScan, indexMinutes } from './overlays.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT || 'playwright');
 const OUT = process.argv[2], ONLY = process.argv[3] ? new Set(process.argv[3].split(',')) : null;
 const T = new Date('2026-10-16T21:30:00+08:00');
@@ -7,24 +8,9 @@ const want = k => !ONLY || ONLY.has(k);
 const b = await chromium.launch();
 const VIEW = { width: 1440, height: 1000 };
 
-// 當沖掃描：盤中的觀察名單（示意）
-const ctx = (d, h, vr, sup, res, obi, delta) => ({ ready: true, reasons: [], conditions: { breakout: vr >= 2, vwap: false, bid: false, weak: false }, daily: { long: d, count: 30, ma20: 0 }, hour: { long: h, count: 24, ma20: 0 }, five: { volumeRatio: vr, support: sup, resistance: res }, book: { obi, delta, age: 1.2 } });
+// 當沖掃描的觀察名單與大盤分時資料（示意；與商店版 App 的示意模式共用）
 const st = new Map((await (await fetch('http://127.0.0.1:4391/api/state')).json()).stocks.map(s => [s.id, s]));
-const item = (id, name, _p, _c, _v, score, part, c, last, stop) => { const s = st.get(id), price = s.price, change = s.change, vwap = Math.round(price * 0.986 * 100) / 100;
-  c.daily.ma20 = s.technical?.ma20 ?? null; c.hour.ma20 = Math.round(price * 0.975 * 100) / 100; c.five.support = Math.round(price * 0.985 * 10) / 10; c.five.resistance = Math.round(price * 0.996 * 10) / 10;
-  return { id, name, price, change, vwap, vwapDist: 1.42, rvol: Math.round(c.five.volumeRatio * 1.3 * 100) / 100, obi: c.book.obi, outer5: 62, score, part, filters: [], context: c, reference: stop ? { stop: Math.round(price * 0.982) } : null, last, watch: true, scan: true }; };
-const dtScan = {
-  phaseName: '掃描中', market: { twse: { chg: 0.62, r15: 0.18, avg: 23102.3, vsAvg: 0.21, up: 612, down: 301, regime: 'tailwind', stale: false }, tpex: { chg: 0.48, r15: -0.06, avg: 261.4, vsAvg: 0.12, up: 455, down: 330, regime: 'neutral', stale: false } },
-  feed: { window: true, connected: true, mode: 'full', subscribed: 132, expected: 132, connections: [1, 2] }, plan: 'advanced', plans: { advanced: { limit: 2000 } },
-  prep: { eligible: 1612, disposition: 14, suspended: 3, sellFirstOff: 22, ref: 1980, errors: [] }, marketChange: 1.12, history: Array.from({ length: 43 }, () => ({ status: 'ready' })), total: 43, displayMin: 70, hidden: 31,
-  top: [
-    item('3017', '奇鋐', 1048, 4.28, 1031.6, 92, { daily: 20, hour: 25, five: 27, book: 20 }, ctx(true, true, 2.6, 1032, 1045, 0.42, 0.12), { type: 'dt-breakout', t: '09:42:18' }, 1029),
-    item('6669', '緯穎', 2745, 3.58, 2721.4, 88, { daily: 20, hour: 25, five: 23, book: 20 }, ctx(true, true, 1.7, 2712, 2740, 0.36, 0.08), { type: 'dt-vwap', t: '10:26:09' }, 2705),
-    item('2368', '金像電', 361.5, 2.12, 357.9, 81, { daily: 20, hour: 25, five: 21, book: 15 }, ctx(true, true, 1.5, 356, 361, 0.27, 0.04), null, null),
-    item('3037', '欣興', 190.5, 1.88, 188.7, 76, { daily: 20, hour: 25, five: 18, book: 13 }, ctx(true, true, 1.3, 187.5, 190, 0.22, 0.03), null, null),
-    item('2382', '廣達', 299.5, 1.01, 300.2, 72, { daily: 20, hour: 25, five: 14, book: 13 }, ctx(true, true, 1.1, 297.5, 301, 0.18, -0.02), null, null),
-  ],
-};
+const dtScan = dayTradeScan(st);
 async function desktop(page) {
   await page.clock.install({ time: T });
   await page.route('**/api/daytrade', async r => { const res = await r.fetch(); const j = await res.json(); r.fulfill({ response: res, json: { ...j, ...dtScan, capable: true, enabled: true, settings: j.settings } }); });
@@ -92,10 +78,9 @@ if (want('mobile')) {
 // 摺疊手機（iPhone Duo 的 CSS 尺寸）：展開橫向＝左右雙頁、展開直向＝上下雙頁、封面螢幕＝單頁
 // 示意資料沒有指數分時資料，副頁閒置時的大盤走勢以合成的分時資料取代 /m/api/index 的回應
 if (want('foldable')) {
-  const ixMinutes = (ref, last) => { const m = [], c = [], v = []; for (let t = 540; t <= 810; t++) { const k = (t - 540) / 270; m.push(t); c.push(Math.round((ref + (last - ref) * k + Math.sin(t / 9) * ref * .0012 + Math.sin(t / 37) * ref * .002) * 100) / 100); v.push(t < 560 || t > 790 ? 30 + t % 9 : 6 + t % 5); } c[c.length - 1] = last; return { m, c, v, vwap: m.map(() => null), group: m.map(() => null) }; };
   const fold = async (w, h) => {
     const c = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2 }), p = await c.newPage(); await p.clock.install({ time: T });
-    await p.route(u => u.pathname === '/m/api/index', async r => { const res = await r.fetch(), j = await res.json(), ref = j.ref || 23005, last = j.quote?.last || 23187, M = ixMinutes(ref, last);
+    await p.route(u => u.pathname === '/m/api/index', async r => { const res = await r.fetch(), j = await res.json(), ref = j.ref || 23005, last = j.quote?.last || 23187, M = indexMinutes(ref, last);
       r.fulfill({ response: res, json: { ...j, source: 'fugle', ref, minutes: M, quote: { ...j.quote, open: M.c[0], high: Math.max(...M.c), low: Math.min(...M.c) } } }); });
     await p.goto('http://127.0.0.1:4392/'); await p.waitForTimeout(800);
     await p.evaluate(() => fetch('/m/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'nexus-pocket' }, body: JSON.stringify({ password: 'demo-password-123' }) }));

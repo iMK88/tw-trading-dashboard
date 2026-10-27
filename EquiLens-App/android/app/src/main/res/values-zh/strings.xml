@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">衡析</string>
+    <string name="channel_name">衡析通知</string>
+    <string name="channel_desc">盤中雷達、自訂提醒、新聞、AI 日報與籌碼追蹤</string>
+    <string name="cannot_connect">無法連到 %1$s，請確認電腦已開機且衡析正在執行。</string>
+    <string name="invalid_url">請輸入 https:// 開頭的網址</string>
+    <string name="not_pocket">%1$s 不是衡析手機版的網址，或目前無法連線。</string>
+    <string name="save_failed">圖片儲存失敗</string>
+    <string name="demo_readonly">示意模式無法變更設定或查詢新資料</string>
+    <string name="demo_missing">示意模式沒有這項資料</string>
+</resources>

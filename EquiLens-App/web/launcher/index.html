@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><title>衡析</title><link rel="stylesheet" href="launcher.css"><script src="launcher.js" defer></script></head>
+<body>
+<main class="wrap">
+  <svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#07101C"/><polygon points="50,23.6 72.86,36.8 72.86,63.2 50,76.4 27.14,63.2 27.14,36.8" fill="#2EE6FF" stroke="#2EE6FF" stroke-width="6.6" stroke-linejoin="round"/><polyline points="35.48,61.22 46.04,50 53.96,56.6 65.84,39.44" fill="none" stroke="#07101C" stroke-width="5.94" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1 data-t="title">衡析</h1>
+  <p class="lead" data-t="lead">台股研究戰情室的手機 App。資料與金鑰都在你自己的電腦上，App 透過你的網址連回去。</p>
+  <form id="connect" autocomplete="off" novalidate>
+    <label for="url" data-t="label">你的衡析手機版網址</label>
+    <input id="url" type="url" inputmode="url" placeholder="https://pocket.example.com" autocapitalize="off" spellcheck="false">
+    <button class="primary" type="submit" data-t="connect">連線</button>
+    <p class="err" id="err" role="alert"></p>
+  </form>
+  <div id="recent"></div>
+  <div class="or"><span data-t="or">還沒有在電腦上安裝衡析？</span></div>
+  <button class="ghost" id="demo" type="button" data-t="demo">使用示意模式（不需要電腦）</button>
+  <p class="note" data-t="demoNote">示意模式以合成的示意資料展示所有畫面，無法查詢或變更設定。</p>
+  <details class="help"><summary data-t="howTitle">怎麼取得網址？</summary>
+    <ol>
+      <li data-t="how1">在 Windows 或 Mac 電腦安裝衡析 Nexus 與手機版（免費、開放原始碼）。</li>
+      <li data-t="how2">在電腦版「資料與設定 → 遠端存取」設定網域與手機密碼。</li>
+      <li data-t="how3">把手機版網址輸入上方，登入後即可使用，並可開啟推播通知。</li>
+    </ol>
+    <button class="link" type="button" data-open="https://github.com/wakin61043/tw-trading-dashboard" data-t="guide">安裝說明（GitHub）</button>
+  </details>
+  <footer><button class="link" type="button" data-open="https://github.com/wakin61043/tw-trading-dashboard/blob/main/docs/PRIVACY.zh-TW.md" data-open-en="https://github.com/wakin61043/tw-trading-dashboard/blob/main/docs/PRIVACY.md" data-t="privacy">隱私權政策</button><span id="ver"></span></footer>
+  <p class="disc" data-t="disc">衡析是研究工具，畫面上的分數、提醒與文字不構成投資建議。</p>
+</main>
+</body></html>

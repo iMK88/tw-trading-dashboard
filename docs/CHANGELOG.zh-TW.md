@@ -2,6 +2,22 @@
 
 每次更新都記在這裡，最新的在最上面。各功能的完整說明見[功能說明](features/README.md)。
 
+## 2026-10-27 · 商店版 App（Google Play／App Store 上架包）
+
+- 新增 `EquiLens-App/`：Android（Kotlin）與 iOS（Swift）原生殼，連回使用者自己電腦上的衡析手機版，見[商店版 App](features/mobile-app.md)與 [EquiLens-App/README.md](../EquiLens-App/README.md)。
+- **原生推播**：App 以 Firebase 取得推播 token，登記到電腦上的衡析（`POST /m/api/push/app-subscribe`），通知經推播中繼（Cloudflare Worker，`EquiLens-App/relay/`）送達。中繼不保存通知內容或 token；token 失效時自動刪除那台裝置。iPhone 不必再加入主畫面才能收通知。
+- **示意模式**：App 內建合成的示意資料，沒有電腦也能瀏覽所有畫面，供試用與商店審查。查詢與設定在示意模式中停用；焦點頁的新聞標題標示「【示意】」。`EquiLens-App/tools/preview.mjs` 可在電腦瀏覽器預覽示意模式與連線頁。
+- App 內的手機版：推播改走原生推播；圖卡在 Android 直接存到相簿，在 iPhone 開分享選單；「螢幕恆亮」改由 App 控制；設定頁新增「📱 衡析 App」（切換伺服器／示意模式）。
+- 上架包：
+  - 商店文字、審查說明、資料安全與 App 隱私權答案（`EquiLens-App/store/`）。
+  - 圖示、Play 主題圖片，以及 Play 手機／平板、iPhone 6.9 吋、iPad 13 吋截圖。
+  - [隱私權政策](PRIVACY.zh-TW.md)（[English](PRIVACY.md)）。
+- 建置：
+  - Android 目標 API 36（Android 16，符合 Google Play 2026 年的要求）、最低 Android 10。
+  - iOS 以 Xcode 26 建置、最低 iOS 16.4，支援 iPad 與摺疊螢幕版面。
+  - GitHub Actions（`app-android.yml`、`app-ios.yml`）可在雲端建置、簽署並上傳。
+- 截圖工具的當沖觀察名單與大盤分時示意資料移到 `tools/screenshots/overlays.mjs`，與 App 示意模式共用。
+
 ## 2026-10-24 · 手機版支援摺疊手機與平板（左右／上下雙頁）
 
 - 手機版依螢幕形狀自動切換版面，見[摺疊手機與平板](features/foldable.md)：
