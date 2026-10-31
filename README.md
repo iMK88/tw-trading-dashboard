@@ -105,6 +105,7 @@ Australia, Singapore, India.**
 | [TAIFEX public data](https://www.taifex.com.tw) | TW | none | institutional TAIEX futures and TXO option positions, TXO open interest by strike (preferred for the flows page) |
 | [FinMind](https://finmindtrade.com) | TW | free / Sponsor | daily and adjusted bars, institutional flows, revenue, P/E, news, shareholding, futures, margin; **Sponsor** adds live snapshots, minute bars, whole-market data, broker branches and the pre-market day-trade list, suspensions and reference prices |
 | [Fugle](https://developer.fugle.tw) | TW | free / paid | daily (adjusted) and minute bars; WebSocket live stream for the intraday radar and day-trade monitoring (subscriptions: Basic 5, Developer 300, Advanced 2,000 — full mode uses trades + 1-minute bars + order book, 3 per stock; otherwise aggregates, 1 per stock); paid plans add a whole-market live snapshot |
+| [E.SUN Securities market data](docs/features/esun.md) | TW | free with an E.SUN account | the same market data API as Fugle: whole-market live snapshot, daily and minute bars, WebSocket live stream (300 subscriptions with developer access); needs E.SUN's config file and .p12 certificate |
 | [Twelve Data](https://twelvedata.com) | all 12 markets | free / paid | stock list, daily bars, live quotes, minute bars |
 | [Alpha Vantage](https://www.alphavantage.co) | US, GB, CA, DE, IN | free / premium | daily bars, quotes, news sentiment, P/E, quarterly revenue |
 
