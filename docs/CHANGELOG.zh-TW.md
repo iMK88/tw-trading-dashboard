@@ -2,6 +2,14 @@
 
 每次更新都記在這裡，最新的在最上面。各功能的完整說明見[功能說明](features/README.md)。
 
+## 2026-10-31 · 免金鑰的大戶集中度排行與法人／期貨籌碼（集保、期交所開放資料）
+
+- [大戶集中度排行](features/big-holders.md)：沒有 FinMind Sponsor 時，自動改用**集保結算所開放資料**的全市場股權分散表（免金鑰）。集保只提供最新一週，所以在本機逐週累積，2 週後才有 1 週變化、5 週後才有 4 週變化；頁面會標示資料來源。
+- 「籌碼追蹤」頁在台股一律顯示：沒有 Sponsor 時，分點追蹤顯示需要的方案，大戶集中度排行照常使用。手機版的「籌碼」分頁同樣調整。
+- [法人／期貨籌碼](features/flows.md)：外資台指期、選擇權買賣權部位與選擇權未平倉分布改為優先使用**期交所公開資料**（免金鑰，失敗時改用 FinMind），每次查詢少用 3 次 FinMind 請求。
+- 法人／期貨籌碼在沒有 FinMind 時也能使用：現貨改用證交所 `T86`、櫃買三大法人日報、證交所 `BFI82U` 與本機股票清單。查詢按鈕從「查詢 FinMind」改為「查詢」。
+- 新增 `lib/providers/tdcc.mjs`、`lib/providers/taifex.mjs`，證交所資料源新增三大法人買賣金額（`BFI82U`）。
+
 ## 2026-10-27 · 商店版 App（Google Play／App Store 上架包）
 
 - 新增 `EquiLens-App/`：Android（Kotlin）與 iOS（Swift）原生殼，連回使用者自己電腦上的衡析手機版，見[商店版 App](features/mobile-app.md)與 [EquiLens-App/README.md](../EquiLens-App/README.md)。

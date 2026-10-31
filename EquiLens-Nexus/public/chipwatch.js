@@ -30,12 +30,14 @@ async function startQuery(date) {
 }
 async function loadRank() { W.rank = await C.api('holders/rank?scope=' + W.scope); }
 
+// 集保開放資料只有最新一週：1 週與 4 週變化要在本機累積
+const tdccNote = '資料來源：集保結算所開放資料（免金鑰，每週公布最新一週）。本機累積 2 週後才有 1 週變化、5 週後才有 4 週變化。';
 export function chipPage() {
   const i = W.info, r = W.rank;
   if (!i && !W.error) return '<div class="empty"><i class="spinner"></i>讀取中…</div>';
-  if (i && !i.capable) return `<div class="notice warn"><span>籌碼追蹤需要 FinMind Sponsor 方案（券商分點與全市場股權分散表）。</span><button data-page="settings">資料來源設定 →</button></div>`;
   const s = i?.settings || {};
-  const bw = `<section class="panel"><div class="panelhead"><div><h2><span class="idx">01</span>分點追蹤</h2><p>指定券商分點，每個交易日盤後整理它在全市場的進出 · 自選與研究名單股票特別標示 · 達門檻推播到手機</p></div>
+  // 沒有 Sponsor 時只能用大戶集中度排行（集保開放資料）；分點追蹤顯示需要的方案
+  const bw = i && !i.capable ? `<section class="panel"><div class="panelhead"><div><h2><span class="idx">01</span>分點追蹤</h2></div></div><div class="contentpad"><div class="notice warn"><span>分點追蹤需要 FinMind Sponsor 方案（券商分點）。</span><button data-page="settings">資料來源設定 →</button></div></div></section>` : `<section class="panel"><div class="panelhead"><div><h2><span class="idx">01</span>分點追蹤</h2><p>指定券商分點，每個交易日盤後整理它在全市場的進出 · 自選與研究名單股票特別標示 · 達門檻推播到手機</p></div>
     <div class="actions">${i ? cwDateHTML(i, W) : ''}<button class="primary" data-cw="query" ${W.loading || i?.busy || !s.branches?.length ? 'disabled' : ''}>${W.loading || i?.busy ? '<i class="spinner"></i>查詢中…' : '⟳ 查詢最新交易日'}</button></div></div>
     <div class="contentpad"><div class="ix-cw-set">${branchChips(s)}
       <form class="ix-cw-search" data-cw-search><input name="q" value="${esc(W.q)}" placeholder="搜尋券商分點名稱或代號，例如 凱基台北、9200" maxlength="30" aria-label="搜尋券商分點"><button type="submit">搜尋</button></form>
@@ -46,7 +48,7 @@ ${branchRulesForm(s)}<span class="fine">最多 ${i?.maxBranches || 20} 個分點
     <div class="ix-cw-report">${chipwatchHTML(i)}</div></div></section>`;
   const h = `<section class="panel"><div class="panelhead"><div><h2><span class="idx">02</span>大戶集中度排行</h2><p>每週股權分散表：千張大戶持股比例 1 週／4 週變化，搭配股東人數判讀籌碼集中或渙散</p></div>
     <div class="actions"><div class="segmented">${[['mine', '自選＋研究名單'], ['market', '全市場']].map(([v, l]) => `<button class="${W.scope === v ? 'selected' : ''}" data-hr-scope="${v}">${l}</button>`).join('')}</div><button data-hr="query" ${W.hloading || r?.busy ? 'disabled' : ''}>${W.hloading || r?.busy ? '<i class="spinner"></i>更新中…' : '⟳ 更新'}</button></div></div>
-    <div class="contentpad">${r?.error ? `<div class="notice warn"><span>${esc(r.error)}</span></div>` : ''}
+    <div class="contentpad">${r?.error ? `<div class="notice warn"><span>${esc(r.error)}</span></div>` : ''}${r?.source === 'tdcc' ? `<p class="fine" style="margin:0 0 10px">${tdccNote}</p>` : ''}
     <label class="checkbox" style="margin-bottom:10px"><input type="checkbox" data-cw-opt="holdersPush" ${s.holdersPush ? 'checked' : ''}>每週新資料公布時，推播自選＋研究名單的集中／渙散摘要</label>
     ${holderRankHTML(r?.rank, { limit: W.scope === 'market' ? 60 : 200 })}</div></section>`;
   return bw + h;

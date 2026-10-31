@@ -49,12 +49,13 @@ component's `.local/` folder; API keys are encrypted by the operating system (se
 - **Pattern scanner** – 10 classic patterns over 90 sessions with conditional entry and stop levels.
 - **AI after-market report** – written by Claude, OpenAI, Gemini or any OpenAI-compatible endpoint (including local
   models), with a short note on every watchlist stock and a downloadable 9:16 summary card.
-- **Chip tracking** (Taiwan, FinMind Sponsor) – track chosen broker branches (each branch's market-wide trades after the
+- **Chip tracking** (Taiwan; branch and warrant tracking need FinMind Sponsor, the big-holder ranking also works with keyless TDCC open data) – track chosen broker branches (each branch's market-wide trades after the
   close, streaks, push above a threshold) and rank stocks by the weekly change in 1,000-lot holders. **Warrant tracking**
   adds each tracked branch's call-warrant trades grouped by underlying (big-buy and consecutive-buy alerts; the issuer's
   own market making is excluded) and a call-warrant panel in the stock window ([details, zh-TW](docs/features/warrants.md)).
-- **Market-specific modules** – for Taiwan with FinMind: broker branches, shareholding distribution, institutional
-  and futures/options flows.
+- **Market-specific modules** – for Taiwan: broker branches (FinMind Sponsor), shareholding distribution (FinMind, or
+  keyless TDCC open data for the weekly ranking), institutional and futures/options flows (TAIFEX for derivatives and
+  FinMind or TWSE/TPEx for stocks, so it works without any key).
 - **Interface languages** – Traditional Chinese and English.
 
 ### Screenshots
@@ -100,6 +101,8 @@ Australia, Singapore, India.**
 | Data source | Markets | Key | Provides |
 |---|---|---|---|
 | [TWSE / TPEx open data](https://openapi.twse.com.tw) | TW | none | stock list, trading calendar, daily bars, whole-market daily data, institutional flows (whole market by day), P/E, monthly revenue |
+| [TDCC open data](https://opendata.tdcc.com.tw) | TW | none | whole-market shareholding distribution (latest week only; used for the big-holder ranking without FinMind Sponsor) |
+| [TAIFEX public data](https://www.taifex.com.tw) | TW | none | institutional TAIEX futures and TXO option positions, TXO open interest by strike (preferred for the flows page) |
 | [FinMind](https://finmindtrade.com) | TW | free / Sponsor | daily and adjusted bars, institutional flows, revenue, P/E, news, shareholding, futures, margin; **Sponsor** adds live snapshots, minute bars, whole-market data, broker branches and the pre-market day-trade list, suspensions and reference prices |
 | [Fugle](https://developer.fugle.tw) | TW | free / paid | daily (adjusted) and minute bars; WebSocket live stream for the intraday radar and day-trade monitoring (subscriptions: Basic 5, Developer 300, Advanced 2,000 — full mode uses trades + 1-minute bars + order book, 3 per stock; otherwise aggregates, 1 per stock); paid plans add a whole-market live snapshot |
 | [Twelve Data](https://twelvedata.com) | all 12 markets | free / paid | stock list, daily bars, live quotes, minute bars |

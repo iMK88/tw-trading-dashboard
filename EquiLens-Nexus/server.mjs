@@ -31,7 +31,8 @@ import { createHistoryLoader } from './lib/daytrade-history.mjs';
 import { regimeOf, strengthOf } from './lib/daytrade-market.mjs';
 import { dispositions, tpexDayTrade, callWarrantQuotes } from './lib/providers/twse.mjs';
 import { cnyesNews } from './lib/providers/cnyes.mjs';
-import { queryFlows, validFlowDate, cacheableFlow } from './lib/flows.mjs';
+import { queryFlows, validFlowDate, cacheableFlow, flowRequester } from './lib/flows.mjs';
+import { fetchTdccHolders } from './lib/providers/tdcc.mjs';
 import { queryHeatmap, validHeatDate, cacheableHeatmap, buildLiveHeatmap, liveWindow, LIVE_REFRESH_MS } from './lib/heatmap.mjs';
 import { focusNews, weekAgenda } from './lib/briefing.mjs';
 import { normalizeNews, validNewsInput, createNewsState, scanNews, saveNewsState, quietNow } from './lib/newswatch.mjs';
@@ -606,6 +607,14 @@ async function tradingDates(){
 // 台股在地模組（券商分點、股權分散、期貨、融資、法人總覽）目前只有 FinMind 提供
 function finmind(cap){const fm=data.finmind();if(!fm||(cap&&!supports(PROVIDERS.finmind,cap)))throw new UserError('此功能需要台股 FinMind 資料源（{cap}）',{cap:t(CAPABILITIES[cap]||cap)});return fm;}
 const fmOpt=()=>({interval:settings.interval});
+// 法人／期貨籌碼：有 FinMind 時以 FinMind 為主（期貨與選擇權先用期交所）；台股沒有 FinMind 時改用證交所／櫃買與期交所的免金鑰資料
+const flowsSource=()=>pickFlows()||(M().id==='TW'?'twse':null);
+const pickFlows=()=>capabilityMap().flows;
+const flowReq=()=>flowRequester({fm:pickFlows()?data.finmind():null,universe});
+// 全市場股權分散表（大戶集中度排行）：有 FinMind Sponsor 時用 FinMind（可回溯歷史）；台股沒有時改用集保開放資料（只有最新一週，在本機逐週累積）
+const holdersSource=()=>M().id!=='TW'?null:chipCapable()?'finmind':'tdcc';
+// 前端用的能力表：加上不經資料源路由的免金鑰台股資料（大戶排行、法人／期貨籌碼）
+const capsForClient=()=>({...capabilityMap(),flows:flowsSource(),holdersAll:holdersSource()});
 const insightPending=new Map();
 function once(key,fn){if(!insightPending.has(key))insightPending.set(key,fn().finally(()=>insightPending.delete(key)));return insightPending.get(key);}
 async function brokerReport(id,n){
@@ -845,6 +854,14 @@ async function refreshHolders(){
   if(hd.busy)throw new UserError('大戶資料更新中，請稍候');
   hd.busy=true;hd.error='';hd.probeAt=Date.now();
   try{
+    if(holdersSource()==='tdcc'){
+      // 集保開放資料只有最新一週：存成一份紀錄，舊週次靠每週累積
+      const had=hdDates().at(-1)||'',{date,rows}=await fetchTdccHolders();
+      if(!hdDates().includes(date)){const s=holderMarketDay(rows,date);if(!Object.keys(s).length)throw new UserError('查無股權分散資料');fs.mkdirSync(path.join(LOCAL,'holders-all'),{recursive:true});write(`holders-all/${date}.json`,{date,at:Date.now(),s,source:'tdcc'});}
+      for(const d of hdDates().slice(0,-12))fs.rmSync(path.join(LOCAL,'holders-all',`${d}.json`),{force:true});
+      hd.cache={key:'',data:null};
+      return date>had;
+    }
     const probe=await finmind('brokers')('TaiwanStockHoldingSharesPer',{data_id:'2330',start_date:minusDays(today(),45)},fmOpt());
     const dates=[...new Set(probe.map(r=>r.date))].sort();if(!dates.length)throw new UserError('查無股權分散資料');
     const had=hdDates().at(-1)||'';
@@ -868,9 +885,9 @@ function holderRank(scope='mine',date){
   const data=r&&scope==='market'?{...r,rows:[...r.rows.slice(0,60),...r.rows.slice(60).slice(-60)]}:r;
   hd.cache={key,data};return data;
 }
-const holderStatus=()=>({dates:hdDates().slice(-12),busy:hd.busy,error:hd.error,checkedAt:hd.probeAt||null});
+const holderStatus=()=>({dates:hdDates().slice(-12),busy:hd.busy,error:hd.error,checkedAt:hd.probeAt||null,source:holdersSource()});
 setInterval(()=>{
-  if(hd.busy||Date.now()-hd.probeAt<6*3600e3||!chipCapable())return;
+  if(hd.busy||Date.now()-hd.probeAt<6*3600e3||!holdersSource())return;
   hd.probeAt=Date.now();
   refreshHolders().then(fresh=>{if(fresh&&chipSettings().holdersPush){const a=holderRankAlert(holderRank('mine'),{lang:language()});if(a)addAlerts(today(),[a]);}}).catch(e=>console.error(t('大戶資料更新失敗：')+e.message));
 },10*60e3).unref();
@@ -967,8 +984,8 @@ async function generateDaily(date){
     let heat=read('heatmap-'+date+'.json',null);
     if(!heat&&!heatBusy&&!job.running&&!flowBusy){try{const h=await runHeatmap(date);if(h.date===date)heat=h;}catch{}}
     if(!heat&&liveHeat?.data?.date===date)heat=liveHeat.data;
-    let flows=read('flows-'+date+'.json',null);const fm=data.finmind();
-    if(!flows&&fm&&!heatBusy&&!job.running&&!flowBusy){flowBusy=true;try{const r=await queryFlows(date,{requestData:fm,...fmOpt()});if(cacheableFlow(r))write('flows-'+date+'.json',r);flows=r;}catch{}finally{flowBusy=false;}}
+    let flows=read('flows-'+date+'.json',null);
+    if(!flows&&flowsSource()&&!heatBusy&&!job.running&&!flowBusy){flowBusy=true;try{const r=await queryFlows(date,{requestData:flowReq(),...fmOpt()});if(cacheableFlow(r))write('flows-'+date+'.json',r);flows=r;}catch{}finally{flowBusy=false;}}
     const lang=language(),board=boardData(watchlist);
     const chips=reportChips(date),hr=new Map((chips?.rank?.rows||[]).map(x=>[x.id,x])),fired=alertsFor(date).list.filter(a=>a.type==='custom');
     // 自選股逐檔資料：報價、量比、大戶週變化、追蹤分點進出、今天觸發的自訂提醒（自選股最多 30 檔）
@@ -1127,7 +1144,7 @@ function configInfo(){
   const c=config();
   return{config:{market:c.market,language:c.language,setupDone:c.setupDone,publicUrl:c.publicUrl,upColor:c.upColor,providers:c.providers},
     market:clientMarket(M()),markets:MARKET_IDS.map(id=>({id,name:MARKETS[id].name,tz:MARKETS[id].tz,currency:MARKETS[id].currency,sample:MARKETS[id].sample,providers:Object.values(PROVIDERS).filter(p=>p.markets.includes(id)).map(p=>p.id)})),
-    languages:LANGUAGES,upColor:upColor(),providers:providerStatus(),capabilities:capabilityMap(),capabilityLabels:Object.fromEntries(Object.entries(CAPABILITIES).map(([k,v])=>[k,t(v)])),
+    languages:LANGUAGES,upColor:upColor(),providers:providerStatus(),capabilities:capsForClient(),capabilityLabels:Object.fromEntries(Object.entries(CAPABILITIES).map(([k,v])=>[k,t(v)])),
     llm:llmStatus(),secretBackend:secretBackend(),groups:researchScope.groups.length,remote:remoteInfo()};
 }
 /* ---------- 遠端存取：手機版網域與通道方式、推播聯絡信箱、電腦版遠端存取（Cloudflare Access） ---------- */
@@ -1376,10 +1393,10 @@ const server = http.createServer(async (req,res) => {
     if(route==='/api/holders/rank'&&req.method==='GET'){
       const scope=url.searchParams.get('scope')==='market'?'market':'mine',date=url.searchParams.get('date');
       if(date&&date!=='latest'&&!validHeatDate(date))throw new UserError('請選擇有效日期');
-      return json(res,200,{capable:chipCapable(),rank:holderRank(scope,date),...holderStatus()});
+      return json(res,200,{capable:!!holdersSource(),rank:holderRank(scope,date),...holderStatus()});
     }
     if(route==='/api/holders/rank/query'&&req.method==='POST'){
-      finmind('brokers');await refreshHolders();return json(res,200,{capable:true,rank:holderRank('mine'),...holderStatus()});
+      if(!holdersSource())finmind('brokers');await refreshHolders();return json(res,200,{capable:true,rank:holderRank('mine'),...holderStatus()});
     }
     if(route==='/api/alerts'&&req.method==='GET'){
       let date=url.searchParams.get('date')||today();
@@ -1482,15 +1499,15 @@ const server = http.createServer(async (req,res) => {
     if(route==='/api/flows'&&req.method==='GET'){const date=url.searchParams.get('date');if(!validFlowDate(date))throw new UserError('請選擇有效日期');return json(res,200,{data:read('flows-'+date+'.json',null)});}
     if(route==='/api/flows/query'&&req.method==='POST'){
       if(job.running||flowBusy||heatBusy)return json(res,409,{error:t('已有資料更新或查詢進行中，請稍候')});
-      const b=await body(req);if(!validFlowDate(b.date))throw new UserError('請選擇 2018-06-05 至今天的有效日期');const fm=finmind('flows');
+      const b=await body(req);if(!validFlowDate(b.date))throw new UserError('請選擇 2018-06-05 至今天的有效日期');if(!flowsSource())throw new UserError('此功能需要台股 FinMind 資料源（{cap}）',{cap:t(CAPABILITIES.flows)});
       if(job.running||flowBusy||heatBusy)return json(res,409,{error:t('已有資料更新或查詢進行中，請稍候')});flowBusy=true;
-      try{const result=await queryFlows(b.date,{requestData:fm,...fmOpt()});if(cacheableFlow(result))write('flows-'+b.date+'.json',result);return json(res,200,{data:result});}finally{flowBusy=false;}
+      try{const result=await queryFlows(b.date,{requestData:flowReq(),...fmOpt()});if(cacheableFlow(result))write('flows-'+b.date+'.json',result);return json(res,200,{data:result});}finally{flowBusy=false;}
     }
     if (route === '/api/state') {
       const m = market(), c = config();
       const headlines=m.stocks.flatMap(s=>(raw[s.id]?.news||[]).filter(n=>n.date.slice(0,10)>=minusDays(m.cutoff,30)).map(n=>({stockId:s.id,name:s.name,title:n.title,date:n.date,url:n.link,source:n.source}))).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,60);
       return json(res,200,{ ...m, appVersion:APP_VERSION, heatDates:heatFiles().slice(-60), heatSummary:heatSummary(),indexSummary:indexSummary(), groups:researchScope.groups, scopeSource:researchScope.source, scopeEntries:researchScope.groups.reduce((n,g)=>n+g.stockIds.length,0), scopeError, stocks:m.stocks.map(({bars,adjustedBars,...s}) => ({...s,chips:{...s.chips,flow:undefined}})), headlines, watchlist, watchGroups, watchExtra:watchExtra(), settings,
-        config:{market:c.market,language:c.language,setupDone:c.setupDone,publicUrl:c.publicUrl}, marketProfile:clientMarket(M()), upColor:upColor(), capabilities:capabilityMap(), dataConfigured:Object.values(capabilityMap()).some(Boolean),
+        config:{market:c.market,language:c.language,setupDone:c.setupDone,publicUrl:c.publicUrl}, marketProfile:clientMarket(M()), upColor:upColor(), capabilities:capsForClient(), dataConfigured:Object.values(capabilityMap()).some(Boolean),
         tokenConfigured:secretConfigured('finmind','FINMIND_API_TOKEN'), llmConfigured:llmConfigured(), claudeConfigured:llmConfigured(), llm:{provider:c.llm.provider,model:c.llm.model||LLM_INFO[c.llm.provider]?.defaultModel||''},
         viewer:req.accessUser?.email||null, monitor:{enabled:settings.monitor!==false,capable:data.has('snapshot'),window:liveWindow(),error:monitorError,lastAt:liveHeat?.at||null}, csrf, job, evidenceCount:evidence.filter(e=>inScope(e.stockId)).length });
     }
@@ -1530,7 +1547,7 @@ const server = http.createServer(async (req,res) => {
     }
     if (route === '/api/health') return json(res,200,{ ok:true, app:'equilens-nexus',version:APP_VERSION, market:config().market, language:language() });
     // 手機版（Pocket）用：市場、語言、配色與可用功能（不含任何金鑰）
-    if (route === '/api/profile' && req.method === 'GET') { const c = config(); return json(res,200,{ language:c.language, market:clientMarket(M()), upColor:upColor(), capabilities:capabilityMap(), publicUrl:c.publicUrl, remote:(({tunnel,hosts,contact})=>({tunnel,hosts,contact}))(remoteInfo()), setupDone:c.setupDone, llmConfigured:llmConfigured(), dataConfigured:Object.values(capabilityMap()).some(Boolean) }); }
+    if (route === '/api/profile' && req.method === 'GET') { const c = config(); return json(res,200,{ language:c.language, market:clientMarket(M()), upColor:upColor(), capabilities:capsForClient(), publicUrl:c.publicUrl, remote:(({tunnel,hosts,contact})=>({tunnel,hosts,contact}))(remoteInfo()), setupDone:c.setupDone, llmConfigured:llmConfigured(), dataConfigured:Object.values(capabilityMap()).some(Boolean) }); }
     if (route === '/api/job' && req.method === 'GET') return json(res,200,{ job, busy:flowBusy||heatBusy });
     if (route === '/api/detail') { const s = market().stocks.find(s => s.id === url.searchParams.get('id')); return s ? json(res,200,{ ...s, news:raw[s.id]?.news || [], evidence:evidence.filter(e => e.stockId === s.id) }) : json(res,404,{ error:t('找不到此股票') }); }
     if (route === '/api/update' && req.method === 'POST') {

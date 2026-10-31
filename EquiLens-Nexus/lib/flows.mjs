@@ -1,5 +1,7 @@
 import {buildOptions} from './options.mjs';
 import {request} from './finmind.mjs';
+import twse,{totalInstitutional} from './providers/twse.mjs';
+import {taifexRequest,taifexSupports} from './providers/taifex.mjs';
 import {todayTW,minusDays,round} from './engine.mjs';
 export const FLOW_VERSION='2.0';
 export function cacheableFlow(result){return !Object.keys(result.errors).length&&result.options?.available&&result.options.contracts.length>0&&result.summary.available&&result.futures.available&&result.coverage.withRecords>0&&result.rankings.every(r=>r.covered>0);}
@@ -17,6 +19,19 @@ export function buildFlows(date,{info=[],stocks=[],total=[],futures=[],options=[
  const tx=[...new Map(futures.filter(r=>(r.futures_id||r.name)==='TX'&&r.institutional_investors==='外資'&&r.date<=date).map(r=>[r.date,r])).values()].sort((a,b)=>a.date.localeCompare(b.date)),current=tx.find(r=>r.date===date),previous=tx.filter(r=>r.date<date).at(-1);
  const position=r=>{const long=amount(r?.long_open_interest_balance_volume),short=amount(r?.short_open_interest_balance_volume);return long===null||short===null?null:{long,short,net:long-short};},now=position(current),before=position(previous);
  return {version:FLOW_VERSION,date,retrievedAt:new Date().toISOString(),summary:{available:totals.length>0,...summary},futures:{available:!!now,asOf:now?date:null,previousDate:before?previous.date:null,...now,netChange:now&&before?now.net-before.net:null,longChange:now&&before?now.long-before.long:null,shortChange:now&&before?now.short-before.short:null},options:buildOptions(date,options,optionDaily),rankings,errors,coverage:{indexed:catalog.size,withRecords:rows.length,returnedRecords:stocks.filter(r=>r.date===date).length},sources:[{title:'期交所選擇權買賣權分計',url:'https://www.taifex.com.tw/cht/3/callsAndPutsDate'},{title:'FinMind 現貨籌碼資料',url:'https://finmind.github.io/tutor/TaiwanMarket/Chip/'},{title:'FinMind 期貨法人資料',url:'https://finmind.github.io/tutor/TaiwanMarket/Derivative/'}]};
+}
+// 法人／期貨籌碼的資料來源：期貨與選擇權先用期交所公開資料（免金鑰，失敗時改用 FinMind）；
+// 沒有 FinMind 時，現貨籌碼改用證交所／櫃買開放資料（個股法人 T86＋櫃買、上市三大法人金額 BFI82U、本機股票清單）
+export function flowRequester({fm=null,universe=[]}={}){
+ return async(dataset,params,options={})=>{
+  const free={signal:options.signal};
+  if(taifexSupports(dataset,params)){try{const rows=await taifexRequest(dataset,params,free);if(rows?.length||!fm)return rows||[];}catch(e){if(!fm)throw e;}}
+  if(fm)return fm(dataset,params,options);
+  if(dataset==='TaiwanStockInfo')return universe.map(s=>({stock_id:s.id,stock_name:s.name,type:s.market==='上櫃'?'tpex':'twse',industry_category:s.sector||'',date:''}));
+  if(dataset==='TaiwanStockInstitutionalInvestorsBuySell')return twse.institutionalAll(params.start_date,free);
+  if(dataset==='TaiwanStockTotalInstitutionalInvestors')return totalInstitutional(params.start_date,free);
+  throw new Error('免金鑰資料源不提供 '+dataset);
+ };
 }
 export async function queryFlows(date,{requestData=request,...options}={}){
  if(!validFlowDate(date))throw new Error('請選擇 2018-06-05 至今天的有效日期');
