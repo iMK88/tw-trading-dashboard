@@ -127,6 +127,16 @@ async function institutionalAll(date, ctx) {
   const tp = await get(`https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade?type=Daily&sect=EW&date=${tpexDate(date)}&response=json`, ctx);
   return [...parseTwseInstitutional(tw, date), ...parseTpexInstitutional(tp, date)];
 }
+// 三大法人買賣金額統計（上市，BFI82U，單位：元）→ FinMind TaiwanStockTotalInstitutionalInvestors 格式（name：Foreign_Investor 等，合計為 total）。
+// 外資自營商已計入自營商，因此不納入合計（與證交所表格相同）
+const TOTAL_NAMES = { '自營商(自行買賣)': 'Dealer_self', '自營商(避險)': 'Dealer_Hedging', '投信': 'Investment_Trust', '外資及陸資(不含外資自營商)': 'Foreign_Investor', '外資自營商': 'Foreign_Dealer_Self', '合計': 'total' };
+export function parseTwseTotalInstitutional(body, date) {
+  if (body?.stat !== 'OK') return [];
+  return (body.data || []).map(r => ({ date, name: TOTAL_NAMES[String(r[0]).trim()], buy: num(r[1]) ?? 0, sell: num(r[2]) ?? 0 })).filter(r => r.name);
+}
+export async function totalInstitutional(date, ctx = {}) {
+  return parseTwseTotalInstitutional(await get(`https://www.twse.com.tw/rwd/zh/fund/BFI82U?type=day&dayDate=${ymd(date)}&response=json`, ctx), date);
+}
 // 最新的本益比／殖利率／股價淨值比（上市＋上櫃全市場一次取回，個股查詢時快取共用）
 let valuationCache = { at: 0, map: new Map() };
 async function valuationMap(ctx) {

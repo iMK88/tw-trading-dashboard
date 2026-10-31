@@ -7,7 +7,7 @@
 - 電腦版：左側選單「籌碼追蹤」→「大戶集中度排行」。
 - 手機版：「籌碼」分頁 →「大戶排行」。
 - 單一股票的大戶持股走勢在個股視窗的「🐋 大戶持股」。
-- 排行需要 FinMind Sponsor 方案（全市場股權分散表）；個股視窗的大戶持股依 FinMind 方案權限。
+- 只在台股顯示。有 FinMind Sponsor 時用 FinMind 的全市場股權分散表；沒有時自動改用**集保結算所開放資料**（免金鑰）。個股視窗的大戶持股依 FinMind 方案權限。
 
 ## 欄位
 
@@ -39,7 +39,12 @@
 
 ## 資料來源與請求量
 
-FinMind `TaiwanStockHoldingSharesPer`：確認新資料 1 次（每 6 小時）；有新的一週時，每個日期 1 次取得全市場資料（共約 3 次）。
+| 來源 | 使用時機 | 請求量 | 歷史 |
+|---|---|---|---|
+| FinMind `TaiwanStockHoldingSharesPer` | 有 FinMind Sponsor | 確認新資料 1 次（每 6 小時）；有新的一週時，每個日期 1 次取得全市場資料（共約 3 次） | 第一次就能取得最新、1 週前、4 週前 |
+| 集保結算所開放資料（`getOD.ashx?id=1-5`，CSV 約 2.4 MB） | 沒有 Sponsor | 每 6 小時 1 次 | 只有最新一週；在本機逐週累積，2 週後才有 1 週變化、5 週後才有 4 週變化，之前判讀顯示「資料累積中」 |
+
+使用集保資料時，頁面會標示資料來源與累積需要的週數。
 
 ## 其他用途
 
@@ -52,4 +57,4 @@ FinMind `TaiwanStockHoldingSharesPer`：確認新資料 1 次（每 6 小時）�
 
 ## 相關檔案
 
-`EquiLens-Nexus/lib/chipwatch.mjs`、`lib/insight.mjs`（分級解析）；紀錄 `.local/holders-all/<日期>.json`；API `GET /api/holders/rank`、`POST /api/holders/rank/query`。
+`EquiLens-Nexus/lib/chipwatch.mjs`、`lib/insight.mjs`（分級解析）、`lib/providers/tdcc.mjs`（集保開放資料）；紀錄 `.local/holders-all/<日期>.json`；API `GET /api/holders/rank`、`POST /api/holders/rank/query`。

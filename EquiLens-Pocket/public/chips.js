@@ -49,10 +49,10 @@ ${branchRulesForm(s)}</div></div></section>
 export function holdersView() {
   const r = W.rank;
   if (!r) return W.error ? `<div class="notice err">${esc(W.error)}</div>` : '<div class="empty"><span class="spinner"></span> 讀取中…</div>';
-  if (!r.capable) return '<div class="notice">大戶排行需要 FinMind Sponsor 方案。</div>';
+  if (!r.capable) return '<div class="notice">大戶排行目前只支援台股。</div>';
   return `<div class="seg" style="margin-bottom:10px">${[['mine', '自選＋研究'], ['market', '全市場']].map(([v, l]) => `<button class="${W.scope === v ? 'on' : ''}" data-hr-scope="${v}">${l}</button>`).join('')}</div>
     ${r.error ? `<div class="notice warn">${esc(r.error)}</div>` : ''}
-    <section class="card"><div class="card-h"><h2>🐋 千張大戶集中度</h2></div><div class="card-b">${holderRankHTML(r.rank, { limit: W.scope === 'market' ? 40 : 200 })}
+    <section class="card"><div class="card-h"><h2>🐋 千張大戶集中度</h2></div><div class="card-b">${r.source === 'tdcc' ? '<p class="fine" style="margin:0 0 8px">資料來源：集保開放資料（每週最新一週，本機累積 2 週後才有 1 週變化、5 週後才有 4 週變化）</p>' : ''}${holderRankHTML(r.rank, { limit: W.scope === 'market' ? 40 : 200 })}
     <button class="btn block" data-hr="query" ${W.hloading || r.busy ? 'disabled' : ''} style="margin-top:10px">${W.hloading || r.busy ? '<span class="spinner"></span> 更新中…' : '⟳ 檢查新的一週'}</button></div></section>`;
 }
 

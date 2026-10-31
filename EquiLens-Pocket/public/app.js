@@ -464,12 +464,12 @@ async function loadFlows(date, query = false) {
   try {
     const r = query ? await api('api/flows/query', { date }) : await api('api/flows?date=' + encodeURIComponent(date || 'latest'));
     if (r.data) { F.data = r.data; F.date = r.data.date; F.contract = r.data.options?.defaultContract; const c = r.data.options?.contracts?.find(c => c.contract === F.contract); F.page = Math.max(0, Math.floor((c?.strikes.findIndex(x => x.strike === c.callPeak) || 0) / 20)); }
-    else F.error = date ? '此日沒有本機紀錄，請按「查詢 FinMind」。' : '尚無法人紀錄，請選擇日期後查詢。';
+    else F.error = date ? '此日沒有本機紀錄，請按「查詢」。' : '尚無法人紀錄，請選擇日期後查詢。';
   } catch (e) { if (!e.silent) F.error = e.message; }
   finally { F.loading = false; }
 }
 // 籌碼分頁：法人（法人與期權籌碼）、分點追蹤、大戶排行（後兩者需要券商分點能力）
-const chipsOn = () => !!S.profile?.capabilities?.brokers;
+const chipsOn = () => !!S.profile?.capabilities?.brokers || !!S.profile?.capabilities?.holdersAll;
 function flowPage() {
   const seg = chipsOn() ? `<div class="seg" style="margin-bottom:12px">${[['inst', '法人'], ['brokers', '分點追蹤'], ['holders', '大戶排行']].map(([v, l]) => `<button class="${S.flows.view === v ? 'on' : ''}" data-fview="${v}">${l}</button>`).join('')}</div>` : '';
   if (chipsOn() && S.flows.view === 'brokers') return seg + brokersView();
