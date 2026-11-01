@@ -2,6 +2,10 @@
 
 每次更新都記在這裡，最新的在最上面。各功能的完整說明見[功能說明](features/README.md)。
 
+## 2026-11-01 · 測試：Windows 金鑰加密測試在其他系統自動略過
+
+- `EquiLens-Nexus/tests/server.test.mjs` 的「Windows credential encryption」測試只在 Windows 執行；macOS／Linux 執行 `npm test` 時顯示為 skipped，不再列為失敗。macOS／Linux 的金鑰存在系統鑰匙圈，測試不寫入，避免覆蓋真實金鑰。功能沒有變動。
+
 ## 2026-11-01 · 新增玉山證券行情資料源（玉山帳戶免費的盤中即時行情）
 
 - 新增[玉山證券行情](features/esun.md)：玉山行情與富果行情是同一套 API，沿用富果的全部功能（盤中全市場快照、日 K、分 K、WebSocket 即時推播），只把驗證換成玉山 SDK 登入取得的 token。開發者權限（完成模擬下單）即可免費使用熱浪圖、時光機、即時看板、異動雷達、自訂提醒、當沖監控與五檔錄製器。
