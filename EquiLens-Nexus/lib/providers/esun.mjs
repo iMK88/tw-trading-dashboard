@@ -47,7 +47,9 @@ export function runHelper(configPath, { cmd = python(), script = SCRIPT, timeout
       let r = null; try { r = JSON.parse(out.trim().split('\n').at(-1) || 'null'); } catch { }
       if (r?.ok && r.token) return finish(resolve, r);
       const msg = HELPER_ERRORS[r?.error] || '玉山證券登入失敗';
-      finish(reject, new DataError(msg, null, { code: 'auth' }));
+      // 設定檔格式錯誤時附上結構上的原因（區段／欄位名稱，不含設定值）
+      const detail = r?.error === 'config-invalid' && r.detail ? String(r.detail).slice(0, 200) : '';
+      finish(reject, new DataError(detail ? msg + '（{detail}）' : msg, detail ? { detail } : null, { code: 'auth' }));
     });
   });
 }

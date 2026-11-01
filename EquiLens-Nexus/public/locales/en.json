@@ -3119,6 +3119,7 @@
  "無法讀取系統鑰匙圈": "Cannot read the system keychain",
  "玉山設定檔 config.ini 的完整路徑": "Full path to your E.SUN config.ini",
  "玉山設定檔格式錯誤（缺少 [User] Account）": "Invalid E.SUN config file (missing [User] Account)",
+ "玉山設定檔格式錯誤（缺少 [User] Account）（{detail}）": "Invalid E.SUN config file (missing [User] Account) ({detail})",
  "玉山證券登入失敗": "E.SUN Securities login failed",
  "玉山證券登入失敗，請確認憑證、金鑰、IP 白名單與密碼": "E.SUN Securities login failed; check the certificate, keys, IP allowlist and passwords",
  "玉山證券登入成功，但無法取得行情 token": "Logged in to E.SUN Securities but could not get a market data token",

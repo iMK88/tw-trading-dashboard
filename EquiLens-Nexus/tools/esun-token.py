@@ -19,6 +19,41 @@ def out(obj, code=0):
     sys.exit(code)
 
 
+def read_config(path):
+    """讀取玉山設定檔；失敗時只回報結構上的原因（不輸出任何設定值）。
+    接受 UTF-8（含 BOM）與 Big5（cp950）；macOS「文字編輯」存成 RTF 時會明確指出。"""
+    with open(path, "rb") as f:
+        raw = f.read()
+    if raw.lstrip().startswith(b"{\\rtf"):
+        out({"ok": False, "error": "config-invalid", "detail": "rtf"}, 1)
+    text = None
+    for enc in ("utf-8-sig", "cp950"):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        out({"ok": False, "error": "config-invalid", "detail": "encoding"}, 1)
+    cfg = configparser.ConfigParser()
+    try:
+        cfg.read_string(text)
+    except configparser.Error as e:
+        out({"ok": False, "error": "config-invalid", "detail": type(e).__name__}, 1)
+    # 區段名稱大小寫不一時（例如 [user]），統一成 [User]
+    if not cfg.has_section("User"):
+        for s in cfg.sections():
+            if s.strip().lower() == "user":
+                cfg["User"] = dict(cfg[s])
+                break
+    if not cfg.has_section("User"):
+        out({"ok": False, "error": "config-invalid", "detail": "no [User] section; sections=" + ",".join(cfg.sections())}, 1)
+    account = cfg["User"].get("Account", "").strip()
+    if not account:
+        out({"ok": False, "error": "config-invalid", "detail": "no Account in [User]; keys=" + ",".join(cfg["User"].keys())}, 1)
+    return cfg, account
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     setup = "--setup" in sys.argv[1:]
@@ -27,12 +62,7 @@ def main():
     path = os.path.expanduser(args[0])
     if not os.path.isfile(path):
         out({"ok": False, "error": "config-not-found"}, 1)
-    cfg = configparser.ConfigParser()
-    try:
-        cfg.read(path, encoding="utf-8")
-        account = cfg["User"]["Account"].strip()
-    except Exception:
-        out({"ok": False, "error": "config-invalid"}, 1)
+    cfg, account = read_config(path)
 
     # 背景執行（沒有終端機）時，鑰匙圈必須已有兩組密碼，否則 SDK 會停在 getpass 等待輸入
     if not setup:
