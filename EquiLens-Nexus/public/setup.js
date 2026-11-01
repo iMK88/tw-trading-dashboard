@@ -19,6 +19,7 @@ const PROVIDER_NOTES = {
   finmind: '台股資料最完整：日 K、還原股價、法人、營收、本益比、新聞、股權分散、期貨；Sponsor 方案另有盤中即時快照、分 K、全市場單日資料、券商分點，以及當沖監控用的可當沖標的、暫停交易與參考價。',
   twse: '證交所與櫃買中心的官方開放資料，免金鑰：股票清單、交易日曆、日 K、全市場單日行情、法人（全市場逐日）、本益比、月營收。沒有盤中即時資料與還原股價。',
   fugle: '富果行情 API：台股日 K（含還原股價）、分 K，以及盤中雷達與當沖監控用的 WebSocket 即時推播。訂閱數（1 檔 × 1 個頻道）：基本 5、開發者 300、進階 2,000；當沖完整模式每檔訂閱逐筆成交、分 K、五檔 3 個頻道，訂閱不足時改用聚合行情（每檔 1 個，自選股優先）。付費方案另有全市場即時快照。啟用後熱浪圖、時光機等其他資料仍依原本的資料源。',
+  esun: '玉山證券行情 API（玉山帳戶免費）：與富果行情相同的盤中全市場快照、分 K、日 K 與 WebSocket 即時推播；開發者權限（完成模擬下單）訂閱數 300、每分鐘 600 次。金鑰欄位填玉山設定檔 config.ini 的完整路徑（路徑不可有空白），第一次使用前請在終端機執行 python3 EquiLens-Nexus/tools/esun-token.py 設定檔路徑 --setup 輸入密碼。只使用行情功能，不會下單。',
   twelvedata: '涵蓋全球多數市場：股票清單、日 K、即時報價、分 K（免費方案每分鐘 8 次、每日 800 次）。',
   alphavantage: '以美股為主（另支援英、加、德、印）：日 K、報價、新聞情緒、本益比、季營收（免費方案每日 25 次）。',
 };
@@ -42,7 +43,7 @@ function providerCard(p, cfg) {
   const status = keyless ? '<span class="tag cyan">免金鑰</span>' : p.configured ? `<span class="tag cyan">已設定</span>${p.plan?.plan ? ` <span class="tag">${esc(p.plan.plan)}</span>` : ''}` : '<span class="tag amber">未設定金鑰</span>';
   return `<article class="setup-provider ${p.enabled ? 'on' : ''}"><div class="sp-head"><label class="checkbox" style="flex-direction:row"><input type="checkbox" data-setup-enable="${p.id}" ${p.enabled ? 'checked' : ''}><b translate="no">${esc(p.name)}</b></label>${status}<a class="sp-link" href="${esc(p.site)}" target="_blank" rel="noopener noreferrer">官網 ↗</a></div>
   <p class="fine">${esc(PROVIDER_NOTES[p.id] || '')}</p><div class="sp-caps">${capChips(p, labels)}</div>
-  ${keyless ? '' : `<form class="sp-key" data-setup-key="${p.id}"><input name="key" type="password" autocomplete="off" placeholder="${esc(p.configured ? '輸入新金鑰以更換' : '貼上 API 金鑰')}" required><button class="primary" type="submit">驗證並儲存</button>${p.configured ? `<button type="button" data-setup-recheck="${p.id}" title="重新讀取方案等級（例如升級或續訂後）">重新驗證</button><button type="button" data-setup-unkey="${p.id}">移除金鑰</button>` : ''}</form>`}</article>`;
+  ${keyless ? '' : `<form class="sp-key" data-setup-key="${p.id}"><input name="key" type="password" autocomplete="off" placeholder="${esc(p.keyHint || (p.configured ? '輸入新金鑰以更換' : '貼上 API 金鑰'))}" required><button class="primary" type="submit">驗證並儲存</button>${p.configured ? `<button type="button" data-setup-recheck="${p.id}" title="重新讀取方案等級（例如升級或續訂後）">重新驗證</button><button type="button" data-setup-unkey="${p.id}">移除金鑰</button>` : ''}</form>`}</article>`;
 }
 function providerList(cfg) {
   const list = cfg.providers.filter(p => p.supportsMarket);

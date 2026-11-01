@@ -3110,5 +3110,21 @@
  "集保結算所開放資料": "TDCC open data",
  "買賣權": "Call/put",
  "⟳ 查詢": "⟳ Query",
- "此日沒有本機紀錄，請按「查詢」。": "No local record for this date. Press \"Query\"."
+ "此日沒有本機紀錄，請按「查詢」。": "No local record for this date. Press \"Query\".",
+ "{label}：尚未設定玉山設定檔路徑": "{label}: the E.SUN config file path is not set",
+ "{label}：無法執行 Python": "{label}: cannot run Python",
+ "{label}：登入逾時": "{label}: login timed out",
+ "找不到玉山行情 SDK（esun_marketdata），請先以 pip 安裝玉山提供的 .whl；或以 ESUN_PYTHON 指定已安裝的 Python": "E.SUN market data SDK (esun_marketdata) not found. Install E.SUN's .whl with pip, or set ESUN_PYTHON to the Python that has it",
+ "找不到玉山設定檔，請確認路徑": "E.SUN config file not found; check the path",
+ "無法讀取系統鑰匙圈": "Cannot read the system keychain",
+ "玉山設定檔 config.ini 的完整路徑": "Full path to your E.SUN config.ini",
+ "玉山設定檔格式錯誤（缺少 [User] Account）": "Invalid E.SUN config file (missing [User] Account)",
+ "玉山設定檔格式錯誤（缺少 [User] Account）（{detail}）": "Invalid E.SUN config file (missing [User] Account) ({detail})",
+ "玉山證券登入失敗": "E.SUN Securities login failed",
+ "玉山證券登入失敗，請確認憑證、金鑰、IP 白名單與密碼": "E.SUN Securities login failed; check the certificate, keys, IP allowlist and passwords",
+ "玉山證券登入成功，但無法取得行情 token": "Logged in to E.SUN Securities but could not get a market data token",
+ "玉山證券行情": "E.SUN Securities market data",
+ "玉山證券行情 API（玉山帳戶免費）：與富果行情相同的盤中全市場快照、分 K、日 K 與 WebSocket 即時推播；開發者權限（完成模擬下單）訂閱數 300、每分鐘 600 次。金鑰欄位填玉山設定檔 config.ini 的完整路徑（路徑不可有空白），第一次使用前請在終端機執行 python3 EquiLens-Nexus/tools/esun-token.py 設定檔路徑 --setup 輸入密碼。只使用行情功能，不會下單。": "E.SUN Securities market data API (free with an E.SUN account): the same whole-market intraday snapshot, minute bars, daily bars and WebSocket live stream as Fugle; developer access (after the simulated order) allows 300 subscriptions and 600 requests a minute. In the key field enter the full path to your E.SUN config.ini (no spaces). Before first use, run python3 EquiLens-Nexus/tools/esun-token.py <config path> --setup in a terminal to enter your passwords. Market data only; it never places orders.",
+ "玉山證券行情未接受此帳戶的 token": "E.SUN market data did not accept this account's token",
+ "鑰匙圈中沒有玉山登入密碼或憑證密碼，請先在終端機執行一次 esun-token.py --setup": "Your E.SUN login or certificate password is not in the keychain; run esun-token.py --setup once in a terminal"
 }

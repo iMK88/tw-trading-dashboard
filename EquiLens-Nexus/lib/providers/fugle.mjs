@@ -3,7 +3,7 @@
 // 沒有法人、分點、新聞等籌碼資料，可搭配證交所開放資料或 FinMind。
 import { DataError, fetchJSON, limiter, num, addDays, httpError } from './common.mjs';
 
-const BASE = 'https://api.fugle.tw/marketdata/v1.0/stock';
+export const BASE = 'https://api.fugle.tw/marketdata/v1.0/stock';
 const WS = 'wss://api.fugle.tw/marketdata/v1.0/stock/streaming';
 // 方案：WebSocket 訂閱數（1 檔 × 1 個頻道 = 1 個）、同時連線數、盤中 REST 每分鐘次數（官方方案表，2026-10）
 export const PLANS = { basic: { limit: 5, connections: 1, perMinute: 60 }, developer: { limit: 300, connections: 2, perMinute: 600 }, advanced: { limit: 2000, connections: 2, perMinute: 2000 } };
@@ -24,10 +24,11 @@ async function get(path, ctx) {
   const history = path.startsWith('/historical/'), q = history ? historyQueue : queue;
   const opts = history ? { ...ctx, interval: Math.max(ctx.interval ?? 0, ctx.historyInterval ?? HISTORY_INTERVAL) } : ctx;
   for (let attempt = 0; ; attempt++) {
-    const r = await q(() => fetchJSON(BASE + path, { headers: { 'X-API-KEY': ctx.key }, signal: ctx.signal, label: LABEL }), opts);
+    // ctx.headers／ctx.label：同一套行情 API 的其他驗證方式（例如玉山證券以 X-SDK-TOKEN 取代 X-API-KEY）
+    const r = await q(() => fetchJSON(BASE + path, { headers: ctx.headers || { 'X-API-KEY': ctx.key }, signal: ctx.signal, label: ctx.label || LABEL }), opts);
     if (r.status === 429 && history && attempt < 2 && !ctx.signal?.aborted) { await pause(Math.min(65, Number(r.headers?.get?.('retry-after')) || 30) * 1000, ctx.signal); continue; }
     if (r.status === 404) return null; // 查詢範圍沒有資料
-    if (!r.ok) throw httpError(LABEL, r.status, r.body?.message);
+    if (!r.ok) throw httpError(ctx.label || LABEL, r.status, r.body?.message);
     return r.body;
   }
 }
