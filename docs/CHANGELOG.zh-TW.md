@@ -2,6 +2,10 @@
 
 每次更新都記在這裡，最新的在最上面。各功能的完整說明見[功能說明](features/README.md)。
 
+## 2026-11-01 · 測試：Windows 金鑰加密測試在其他系統自動略過
+
+- `EquiLens-Nexus/tests/server.test.mjs` 的「Windows credential encryption」測試只在 Windows 執行；macOS／Linux 執行 `npm test` 時顯示為 skipped，不再列為失敗。macOS／Linux 的金鑰存在系統鑰匙圈，測試不寫入，避免覆蓋真實金鑰。功能沒有變動。
+
 ## 2026-10-31 · 免金鑰的大戶集中度排行與法人／期貨籌碼（集保、期交所開放資料）
 
 - [大戶集中度排行](features/big-holders.md)：沒有 FinMind Sponsor 時，自動改用**集保結算所開放資料**的全市場股權分散表（免金鑰）。集保只提供最新一週，所以在本機逐週累積，2 週後才有 1 週變化、5 週後才有 4 週變化；頁面會標示資料來源。

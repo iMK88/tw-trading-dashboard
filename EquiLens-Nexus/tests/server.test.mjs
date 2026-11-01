@@ -83,7 +83,8 @@ test('local API persists watchlist/evidence, validates settings, blocks cross-or
     assert.equal((await fetch(base+'detail?id=999999')).status,404);
   }finally{child.kill();await new Promise(r=>child.once('close',r));fs.rmSync(directory,{recursive:true,force:true});}
 });
-test('Windows credential encryption round trip uses isolated test directory',async()=>{
+// DPAPI 只有 Windows 有；其他平台的金鑰存在系統鑰匙圈，不在測試中寫入，所以略過
+test('Windows credential encryption round trip uses isolated test directory',{skip:process.platform!=='win32'&&'Windows only (DPAPI)'},async()=>{
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'equilens-secret-test-'));
   const run=code=>new Promise((resolve,reject)=>{const c=spawn(process.execPath,['--input-type=module','-e',code],{cwd:root,env:{...process.env,EQUITY_DATA_DIR:directory,FINMIND_API_TOKEN:''},windowsHide:true,stdio:['ignore','pipe','pipe']});let output='';c.stdout.on('data',x=>output+=x);c.on('close',n=>n===0?resolve(output):reject(new Error('Credential test failed')));c.on('error',reject);});
   try{await run("import {saveSecret} from './lib/secrets.mjs';await saveSecret('finmind','test-credential-only');");const ciphertext=fs.readFileSync(path.join(directory,'finmind.dpapi'),'utf8');assert(!ciphertext.includes('test-credential-only'));assert.equal(await run("import {getSecret,secretConfigured} from './lib/secrets.mjs';console.log((await getSecret('finmind','FINMIND_API_TOKEN'))==='test-credential-only'&&secretConfigured('finmind','FINMIND_API_TOKEN'));"),'true\n');
