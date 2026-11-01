@@ -227,6 +227,8 @@ async function streamTick(){
   if(stream&&streamState.provider!==p.id){stream.close();stream=null;}
   streamState={...streamState,dtError};
   const meta={provider:p.id,mode:plan.full?'full':'lite',plan:plan.planId,limit:plan.plan.limit,perMinute:plan.plan.perMinute,total:plan.total};
+  // 需要登入換 token 的資料源（玉山證券）：連線前確保 token 有效，推播驗證失敗時重新登入
+  if(p.prepareStream){const key=await getSecret(p.id,p.keyEnv);if(!key)return;try{await p.prepareStream(key,{authFailed:!!streamState.authFailed});}catch(e){streamState={...streamState,...meta,error:e.message};return;}}
   if(!stream){
     const key=await getSecret(p.id,p.keyEnv);if(!key)return;
     streamState={...meta,connected:false,symbols:plan.ids.length,subscribed:0,expected:plan.ids.length*plan.channels.length,lastAt:0,alive:0,error:'',since:0,resumed:0,connections:[]};
@@ -1138,7 +1140,7 @@ async function refreshPatternMarket(){
 function validateWeights(weights) { return weights && Object.keys(WEIGHTS).every(k => Number.isInteger(weights[k]) && weights[k] >= 0 && weights[k] <= 100) && Object.keys(WEIGHTS).reduce((s,k) => s + weights[k],0) === 100; }
 
 /* ---------- 設定：市場、語言、資料源、推理模型 ---------- */
-const providerStatus=()=>{const c=config(),info=providerInfo();return Object.values(PROVIDERS).map(p=>({id:p.id,name:t(p.name),site:p.site,docs:p.docs,markets:p.markets,key:p.key,keyEnv:p.keyEnv||null,configured:hasKey(p),enabled:c.providers.enabled.includes(p.id),supportsMarket:p.markets.includes(c.market),caps:Object.keys(CAPABILITIES).filter(cap=>supports(p,cap)),plan:info[p.id]?{plan:info[p.id].plan,tier:info[p.id].tier,checkedAt:info[p.id].checkedAt}:null}));};
+const providerStatus=()=>{const c=config(),info=providerInfo();return Object.values(PROVIDERS).map(p=>({id:p.id,name:t(p.name),site:p.site,docs:p.docs,markets:p.markets,key:p.key,keyEnv:p.keyEnv||null,keyHint:p.keyHint?t(p.keyHint):null,configured:hasKey(p),enabled:c.providers.enabled.includes(p.id),supportsMarket:p.markets.includes(c.market),caps:Object.keys(CAPABILITIES).filter(cap=>supports(p,cap)),plan:info[p.id]?{plan:info[p.id].plan,tier:info[p.id].tier,checkedAt:info[p.id].checkedAt}:null}));};
 const llmStatus=()=>{const l=config().llm;return{...l,configured:llmConfigured(),providers:LLM_PROVIDERS.map(id=>({id,name:t(LLM_INFO[id].name),site:LLM_INFO[id].site,keyEnv:LLM_INFO[id].keyEnv,defaultModel:LLM_INFO[id].defaultModel,suggested:LLM_INFO[id].suggested||[],keyOptional:!!LLM_INFO[id].keyOptional,needsBaseUrl:!!LLM_INFO[id].needsBaseUrl,configured:secretConfigured(id,LLM_INFO[id].keyEnv)}))};};
 function configInfo(){
   const c=config();
