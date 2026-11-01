@@ -29,7 +29,8 @@ import { normalizeBooks, checkpoints, buildLiquidity, reduceDay, pickExtras, swa
 import { createDayTrade, buildBaseline, normalizeDaytrade, roundTripCost, tzOffset, evaluateSignal, reviewStats, signalTitle, DT_TITLES } from './lib/daytrade.mjs';
 import { createHistoryLoader } from './lib/daytrade-history.mjs';
 import { regimeOf, strengthOf } from './lib/daytrade-market.mjs';
-import { dispositions, tpexDayTrade, tpexPrep, callWarrantQuotes } from './lib/providers/twse.mjs';
+import { dispositions, tpexDayTrade, tpexPrep, twseDayTradePrep, callWarrantQuotes } from './lib/providers/twse.mjs';
+import { combinePrep, missingItems, needFallback } from './lib/daytrade-prep.mjs';
 import { cnyesNews } from './lib/providers/cnyes.mjs';
 import { queryFlows, validFlowDate, cacheableFlow, flowRequester } from './lib/flows.mjs';
 import { fetchTdccHolders } from './lib/providers/tdcc.mjs';
@@ -380,18 +381,22 @@ function ensureDt(){
   engine.restore(read(`daytrade/${date}.json`,null)?.signals);
   dt={date,engine,baselineDays:baseline.days,baselineStocks:baseline.stock.size};return engine;
 }
-// 盤前（台股 08:30 起）：上市的可當沖標的、暫停交易、暫停先賣後買、參考價（FinMind Sponsor，沒有時用證交所開放資料）；
-// 上櫃的同四項（櫃買中心開放資料）；證交所／櫃買的處置股
+// 盤前（台股 08:30 起）：上市的可當沖標的、暫停交易、暫停先賣後買、參考價（證交所開放資料）；上櫃同四項（櫃買中心開放資料）；
+// 證交所／櫃買的處置股。開盤前 10 分鐘仍有項目未公布、且有 FinMind Sponsor 時，以 FinMind 補上缺的項目（見 lib/daytrade-prep.mjs）
+const DT_FALLBACK_LEAD=10;
 async function dtPrepare(){
   const date=today();if(dtPrep.busy)return;
-  dtPrep={...dtPrep,busy:true};const errors=[];let fin=null,disp=null,otc=null,otcPrep=null;
-  try{if(data.has('dayTrade'))fin=await data.dayTrade(date);}catch(e){errors.push(e.message);}
-  try{if(M().id==='TW')disp=await dispositions(date);}catch(e){errors.push(e.message);}
-  // 上櫃：上市的資料源只涵蓋上市，另向櫃買中心取得可當沖標的（尚未公布時稍後重試）與暫停交易、暫停先賣後買、參考價
-  try{if(M().id==='TW')otc=await tpexDayTrade(date);}catch(e){errors.push(e.message);}
-  try{if(M().id==='TW')otcPrep=await tpexPrep(date);}catch(e){errors.push(e.message);}
-  const eligible=fin?.eligible||otc?.eligible?[...new Set([...(fin?.eligible||[]),...(otc?.eligible||[])])]:null;
-  const d={date,eligible,tpex:otc?otc.eligible.length:null,suspended:[...new Set([...(fin?.suspended||[]),...(otcPrep?.suspended||[])])],sellFirstOff:[...new Set([...(fin?.sellFirstOff||[]),...(otc?.sellFirstOff||[]),...(otcPrep?.sellFirstOff||[])])],ref:{...(otcPrep?.ref||{}),...(fin?.ref||{})},disposition:disp?.ids||[],errors:[...errors,...(fin?.errors||[]),...(otcPrep?.errors||[]),...(disp?.errors||[])],source:data.source('dayTrade'),at:new Date().toISOString()};
+  dtPrep={...dtPrep,busy:true};const errors=[];let listed=null,otcList=null,otc=null,fin=null,disp=null;
+  if(M().id==='TW'){
+    try{listed=await twseDayTradePrep(date);}catch(e){errors.push(e.message);}
+    try{otcList=await tpexDayTrade(date);}catch(e){errors.push(e.message);}
+    try{otc=await tpexPrep(date);}catch(e){errors.push(e.message);}
+    try{disp=await dispositions(date);}catch(e){errors.push(e.message);}
+    const missing=missingItems({listed,otcList,otc});
+    if(needFallback(missing,clock().minute,M().open-DT_FALLBACK_LEAD))try{fin=await data.dayTradeFinmind(date);}catch(e){errors.push(e.message);}
+  }else{try{if(data.has('dayTrade'))listed=await data.dayTrade(date);}catch(e){errors.push(e.message);}}
+  const c=combinePrep({listed,otcList,otc,fin});
+  const d={date,...c,disposition:disp?.ids||[],errors:[...errors,...c.errors,...(disp?.errors||[])],source:M().id==='TW'?'twse':data.source('dayTrade'),at:new Date().toISOString()};
   dtPrep={date,busy:false,data:d,at:Date.now()};write('daytrade-prep.json',d);
   if(dt?.date===date)dt.engine.setPrep(dtPrepFor(date,dt.engine.ids));
 }
@@ -445,13 +450,13 @@ setInterval(()=>{
   if(alerts.length)addAlerts(today(),alerts);
   if(alerts.length||e.signals.length!==count)saveDtLog();
 },1000).unref();
-// 每 20 秒：盤前準備（08:30 起；可當沖清單未公布時 10 分鐘後再試）、收盤後檢討
+// 每 20 秒：盤前準備（08:30 起；有項目未公布時 10 分鐘後再試，到開盤後 30 分鐘為止）、收盤後檢討
 setInterval(()=>{
   const x=clock(),p=M();if(!data.has('stream')||!dtSettings().enabled||x.weekday<1||x.weekday>5)return;
   const date=today();
   if(dt?.date===date&&dt.engine.gaps.size&&streamState.connected&&Date.now()-backfill.started>60000)backfillAll(true).catch(()=>{});
   dtIndexFallback().catch(()=>{});
-  if(x.minute>=p.open-30&&x.minute<p.close&&(dtPrep.date!==date||((!dtPrep.data?.eligible||(M().id==='TW'&&dtPrep.data?.tpex==null))&&Date.now()-dtPrep.at>10*60e3&&x.minute<p.open+30)))dtPrepare().catch(()=>{dtPrep={...dtPrep,busy:false};});
+  if(x.minute>=p.open-30&&x.minute<p.close&&(dtPrep.date!==date||((!dtPrep.data?.eligible||(M().id==='TW'&&(dtPrep.data?.tpex==null||dtPrep.data?.missing?.length)))&&Date.now()-dtPrep.at>10*60e3&&x.minute<p.open+30)))dtPrepare().catch(()=>{dtPrep={...dtPrep,busy:false};});
   if(x.minute>=p.close+p.settle+1&&dt?.date===date&&dtSaved!==date)try{dtClose();}catch(e){console.error(t('當沖訊號檢討失敗：')+e.message);}
 },20e3).unref();
 const PHASES={pre:'盤前',opening:'開盤觀察',scan:'掃描中',stop:'停止新訊號',auction:'收盤集合競價',closed:'收盤'};
@@ -462,7 +467,7 @@ function dtInfo(){
     history:dtHistory.status(dtScanIds()),scope:s.scope,
     need:{symbols:n,watched:watchlist.length,scanned:dtScanIds().length,full:n*(p?.stream?.channels?.full?.length||3),lite:n},plans:p?.stream?.plans||null,plan,fallback:dtFallback===today(),
     feed:{...streamInfo(),window:feedWindow(),backfill:{busy:backfill.busy,done:backfill.done,total:backfill.total,error:backfill.error},pending:e?e.gaps.size:0},
-    prep:pd?{date:pd.date,eligible:pd.eligible?pd.eligible.length:null,tpex:pd.tpex??null,disposition:pd.disposition.length,suspended:pd.suspended.length,sellFirstOff:pd.sellFirstOff.length,ref:Object.keys(pd.ref||{}).length,errors:pd.errors,at:pd.at}:null,
+    prep:pd?{date:pd.date,eligible:pd.eligible?pd.eligible.length:null,tpex:pd.tpex??null,disposition:pd.disposition.length,suspended:pd.suspended.length,sellFirstOff:pd.sellFirstOff.length,ref:Object.keys(pd.ref||{}).length,missing:pd.missing||[],fallback:pd.fallback||null,errors:pd.errors,at:pd.at}:null,
     baselineDays:dt?.baselineDays??null,baselineStocks:dt?.baselineStocks??null,phase:e&&feedWindow()?e.phase(Date.now()):null,phaseName:e&&feedWindow()?PHASES[e.phase(Date.now())]:null,
     asOf:r?.at||null,marketChange:r?.marketChange??null,market:e&&feedWindow()?e.marketState(Date.now()):null,top:(r?.list||[]).filter(x=>x.scan&&!x.filters.length&&x.score>=s.displayMin).slice(0,s.top),hidden:(r?.list||[]).filter(x=>x.scan&&x.score<s.displayMin).length,displayMin:s.displayMin,excluded:(r?.list||[]).filter(x=>x.scan).reduce((out,x)=>{for(const key of x.filters)out[key]=(out[key]||0)+1;return out;},{}),watched:watchlist.map(id=>(r?.list||[]).find(x=>x.id===id)||{id,name:dtMeta.get(id)?.name||id,watch:true,score:0,part:{},filters:[],pending:true,context:{ready:false,reasons:[subscribedIds.has(id)?'waitingQuote':'subscription']}}).filter(x=>x.score>=s.displayMin),total:dtScanIds().length,signals:(e?.signals||[]).slice(-30).reverse()};
 }

@@ -62,7 +62,7 @@ function feedLine(d) {
 function prepLine(d) {
   const p = d.prep, base = '';
   if (!p) return `<span>盤前資料（可當沖標的、處置股、參考價）於開盤前 30 分鐘取得</span>${base}`;
-  return `<span>${p.eligible == null ? '<b class="warn">可當沖清單未取得</b>' : `可當沖 <b class="mono">${fmt(p.eligible)}</b> 檔`}</span><span>處置 <b class="mono">${p.disposition}</b></span><span>暫停交易 <b class="mono">${p.suspended}</b></span><span>暫停先賣後買 <b class="mono">${p.sellFirstOff}</b></span><span>參考價 <b class="mono">${fmt(p.ref)}</b> 檔</span>${p.errors?.length ? `<span class="warn" title="${esc(p.errors.join('\n'))}">部分盤前資料取得失敗</span>` : ''}${base}`;
+  return `<span>${p.eligible == null ? '<b class="warn">可當沖清單未取得</b>' : `可當沖 <b class="mono">${fmt(p.eligible)}</b> 檔`}</span><span>處置 <b class="mono">${p.disposition}</b></span><span>暫停交易 <b class="mono">${p.suspended}</b></span><span>暫停先賣後買 <b class="mono">${p.sellFirstOff}</b></span><span>參考價 <b class="mono">${fmt(p.ref)}</b> 檔</span>${p.fallback?.length ? `<span title="${esc(p.fallback.join('、'))}">交易所資料延遲，已用 FinMind 補上 <b class="mono">${p.fallback.length}</b> 項</span>` : ''}${p.missing?.length ? `<span class="warn" title="${esc(p.missing.join('、'))}">尚未公布 <b class="mono">${p.missing.length}</b> 項</span>` : ''}${p.errors?.length ? `<span class="warn" title="${esc(p.errors.join('\n'))}">部分盤前資料取得失敗</span>` : ''}${base}`;
 }
 function scoreBar(x) {
   return `<span class="dt-bar" title="${PARTS.map(([k, l, max]) => `${l} ${x.part?.[k] ?? 0}／${max}`).join(' · ')}">${PARTS.map(([k, , , c]) => `<i style="width:${(x.part?.[k] || 0)}%;background:${c}"></i>`).join('')}</span><b class="mono">${n1(x.score)}</b>`;

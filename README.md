@@ -36,7 +36,7 @@ component's `.local/` folder; API keys are encrypted by the operating system (se
   watchlist and research groups, plus a live board with daily / 5-minute candles. **Custom alerts** let you set price,
   % change or projected-volume conditions on any stock; they are pushed to your phone when met (one-time or repeating). With a Fugle key the radar runs on a
   WebSocket live stream (watchlist first, up to your plan's limit) instead of periodic snapshots.
-- **Day-trade monitoring** (Taiwan; live data from Fugle or E.SUN, pre-market data from TWSE/TPEx open data without a key, or FinMind Sponsor for listed stocks when configured) – Watchlist alerts combine the previous 30 daily candles,
+- **Day-trade monitoring** (Taiwan; live data from Fugle or E.SUN, pre-market data from TWSE/TPEx open data without a key, with FinMind Sponsor as a fallback when exchange data is late) – Watchlist alerts combine the previous 30 daily candles,
   completed 60-minute and 5-minute candles, same-slot historical volume and a continuous live five-level book window.
   Three long setups are accompanied by weakness and reference-stop alerts; risk alerts continue after the entry cutoff.
   Missing history, stale data or an incomplete feed pause confirmation. Each stock shows its evidence and readiness;

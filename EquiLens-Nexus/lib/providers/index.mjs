@@ -77,6 +77,8 @@ export const data = {
   snapshot: (ids, opts) => call('snapshot', [ids], opts),
   intraday: (id, date, opts) => call('intraday', [id, date], opts),
   dayTrade: (date, opts) => call('dayTrade', [date], opts),
+  // 當沖盤前資料的備援：只在 FinMind 已啟用、有金鑰且不是免費方案時呼叫，否則回傳 null
+  dayTradeFinmind: async (date, opts) => { const p = PROVIDERS.finmind; if (!p || !hasKey(p) || !enabledProviders().includes(p) || !supports(p, 'dayTrade')) return null; return p.dayTrade(date, await ctxOf(p, opts)); },
   news: (id, date, opts) => call('news', [id, date], opts),
   marketNews: (date, opts) => call('marketNews', [date], opts),
   valuation: (id, from, to, opts) => call('valuation', [id, from, to], opts),

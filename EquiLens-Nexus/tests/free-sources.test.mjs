@@ -130,3 +130,31 @@ test('TPEx day-trade prep: halts from paired suspend/resume rows, sell-first not
   assert.equal(parseTpexRefPrices(quotes, '2026-11-02'), null); // 行情日期必須是前一個交易日
   assert.deepEqual(parseTpexDayTrade({ stat: 'ok', date: '20261102', tables: [{ title: '現股當沖交易標的', fields: ['證券代號', '證券名稱', '暫停現股賣出後現款買進當沖註記'], data: [['6488', '環球晶', ''], ['8299', '群聯', 'Y']] }] }), { eligible: ['6488', '8299'], sellFirstOff: ['8299'] });
 });
+
+test('day-trade prep: exchanges first, FinMind Sponsor fills only what is still missing near the open', async () => {
+  const { combinePrep, missingItems, needFallback } = await import('../lib/daytrade-prep.mjs');
+  const listed = { eligible: ['2330', '2317'], suspended: [], sellFirstOff: ['2317'], ref: { 2330: 2370 }, errors: [], missing: [] };
+  const otcList = { eligible: ['5371'], sellFirstOff: [] };
+  const late = { suspended: ['8299'], sellFirstOff: [], ref: {}, errors: ['櫃買參考價：尚未公布 2026-10-30 的行情'], missing: ['ref'] };
+  // 交易所齊全：不需要備援
+  const full = combinePrep({ listed, otcList, otc: { suspended: [], sellFirstOff: [], ref: { 5371: 120 }, errors: [], missing: [] } });
+  assert.deepEqual([full.missing, full.fallback, full.tpex, full.ref], [[], null, 1, { 5371: 120, 2330: 2370 }]);
+  // 櫃買參考價延遲：開盤前 10 分鐘（08:50 = 530）才呼叫 FinMind
+  const miss = missingItems({ listed, otcList, otc: late });
+  assert.deepEqual(miss, ['tpex:ref']);
+  assert.equal(needFallback(miss, 520, 530), false);
+  assert.equal(needFallback(miss, 531, 530), true);
+  assert.equal(needFallback(['tpex:eligible'], 531, 530), false); // FinMind 沒有上櫃可當沖名單
+  const fin = { eligible: ['2330', '2317', '2454'], suspended: ['1101'], sellFirstOff: [], ref: { 2330: 9999, 5371: 121 }, errors: [] };
+  const r = combinePrep({ listed, otcList, otc: late, fin });
+  assert.deepEqual(r.fallback, ['tpex:ref']);
+  assert.deepEqual(r.missing, []);
+  assert.equal(r.ref['2330'], 2370); // 交易所已有的代號不被覆蓋
+  assert.equal(r.ref['5371'], 121);
+  assert.deepEqual(r.eligible, ['2330', '2317', '5371']); // 上市名單已取得，不採用 FinMind 名單
+  assert.deepEqual(r.suspended, ['8299']); // 暫停交易未缺，不合併 FinMind
+  // 交易所全部失敗、FinMind 部分資料集失敗：失敗的項目仍列為缺少
+  const r2 = combinePrep({ fin: { ...fin, errors: ['TaiwanStockSuspended：逾時'] } });
+  assert.deepEqual(r2.eligible, ['2330', '2317', '2454']);
+  assert.ok(r2.missing.includes('twse:suspended') && r2.missing.includes('tpex:eligible') && !r2.missing.includes('twse:ref'));
+});

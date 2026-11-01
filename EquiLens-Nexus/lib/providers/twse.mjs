@@ -61,7 +61,7 @@ export function parseTwseDayTradeList(body, date) {
 }
 // 上市暫停先賣後買預告表（TWTBAU1，前一交易日 18:00 更新）：區間涵蓋 date 的代號
 export function parseTwseSellFirstOff(body, date) {
-  const t = rwdAny(body, /暫停先賣後買/); if (!t) return null;
+  const t = rwdAny(body, /暫停先賣後買/); if (!t) return /沒有符合/.test(body?.stat || '') ? [] : null; // 沒有任何預告
   const f = t.fields || [], code = f.findIndex(x => /代號/.test(x)), a = f.findIndex(x => /開始日/.test(x)), b = f.findIndex(x => /結束日/.test(x));
   if (code < 0 || a < 0) return null;
   return [...new Set((t.data || []).filter(r => { const s = rocIn(r[a]), e = rocIn(r[b]); return s && s <= date && (!e || e >= date); }).map(r => String(r[code]).trim()))];
@@ -118,20 +118,22 @@ export async function twseDayTradePrep(date, { signal } = {}) {
   const suspended = await item('證交所暫停交易', `https://www.twse.com.tw/rwd/zh/afterTrading/TWTAWU?startDate=${ymd(addDays(date, -60))}&endDate=${until}&response=json`, parseTwseSuspended);
   const off = await item('證交所暫停先賣後買', 'https://www.twse.com.tw/rwd/zh/dayTrading/TWTBAU1?response=json', parseTwseSellFirstOff);
   const ref = await item('證交所參考價', `https://www.twse.com.tw/rwd/zh/variation/TWT84U?date=${d}&selectType=ALL&response=json`, parseTwseRefPrices);
-  return { eligible: list?.eligible?.length ? list.eligible : null, suspended: suspended || [], sellFirstOff: [...new Set([...(list?.sellFirstOff || []), ...(off || [])])], ref: ref || {}, errors };
+  // missing：未取得的項目（由 lib/daytrade-prep.mjs 決定是否以 FinMind Sponsor 補上）
+  const missing = [!list?.eligible?.length && 'eligible', suspended == null && 'suspended', off == null && 'sellFirstOff', !ref || !Object.keys(ref).length ? 'ref' : null].filter(Boolean);
+  return { eligible: list?.eligible?.length ? list.eligible : null, suspended: suspended || [], sellFirstOff: [...new Set([...(list?.sellFirstOff || []), ...(off || [])])], ref: ref || {}, errors, missing };
 }
 const ymdToday = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
 // 上櫃三項（可當沖標的另由 tpexDayTrade 取得）：暫停交易、暫停先賣後買預告、參考價（前一個交易日的「次日 參考價」）
 export async function tpexPrep(date, { signal } = {}) {
-  const errors = [], out = { suspended: [], sellFirstOff: [], ref: {}, errors };
-  try { out.suspended = parseTpexSuspended(await get('https://www.tpex.org.tw/openapi/v1/tpex_spendi_history', { signal }), date); } catch (e) { errors.push(`櫃買暫停交易：${e.message}`); }
-  try { out.sellFirstOff = parseTpexSellFirstOff(await get('https://www.tpex.org.tw/openapi/v1/tpex_intraday_trading_pre', { signal }), date); } catch (e) { errors.push(`櫃買暫停先賣後買：${e.message}`); }
+  const errors = [], missing = [], out = { suspended: [], sellFirstOff: [], ref: {}, errors, missing };
+  try { out.suspended = parseTpexSuspended(await get('https://www.tpex.org.tw/openapi/v1/tpex_spendi_history', { signal }), date); } catch (e) { errors.push(`櫃買暫停交易：${e.message}`); missing.push('suspended'); }
+  try { out.sellFirstOff = parseTpexSellFirstOff(await get('https://www.tpex.org.tw/openapi/v1/tpex_intraday_trading_pre', { signal }), date); } catch (e) { errors.push(`櫃買暫停先賣後買：${e.message}`); missing.push('sellFirstOff'); }
   try {
     // 一定要是 date 的前一個交易日；那天的行情還沒公布時留空，不往前拿更舊的
     const prev = (await calendar(addDays(date, -20), { signal })).filter(d => d < date).at(-1);
     const ref = prev ? parseTpexRefPrices(await get(`https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes?date=${tpexDate(prev)}&type=EW&response=json`, { signal }), prev) : null;
-    if (ref) out.ref = ref; else errors.push(`櫃買參考價：尚未公布 ${prev || date} 的行情`);
-  } catch (e) { errors.push(`櫃買參考價：${e.message}`); }
+    if (ref) out.ref = ref; else { errors.push(`櫃買參考價：尚未公布 ${prev || date} 的行情`); missing.push('ref'); }
+  } catch (e) { errors.push(`櫃買參考價：${e.message}`); missing.push('ref'); }
   return out;
 }
 export async function dispositions(date, { signal } = {}) {
