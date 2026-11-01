@@ -3126,5 +3126,19 @@
  "玉山證券行情": "E.SUN Securities market data",
  "玉山證券行情 API（玉山帳戶免費）：與富果行情相同的盤中全市場快照、分 K、日 K 與 WebSocket 即時推播；開發者權限（完成模擬下單）訂閱數 300、每分鐘 600 次。金鑰欄位填玉山設定檔 config.ini 的完整路徑（路徑不可有空白），第一次使用前請在終端機執行 python3 EquiLens-Nexus/tools/esun-token.py 設定檔路徑 --setup 輸入密碼。只使用行情功能，不會下單。": "E.SUN Securities market data API (free with an E.SUN account): the same whole-market intraday snapshot, minute bars, daily bars and WebSocket live stream as Fugle; developer access (after the simulated order) allows 300 subscriptions and 600 requests a minute. In the key field enter the full path to your E.SUN config.ini (no spaces). Before first use, run python3 EquiLens-Nexus/tools/esun-token.py <config path> --setup in a terminal to enter your passwords. Market data only; it never places orders.",
  "玉山證券行情未接受此帳戶的 token": "E.SUN market data did not accept this account's token",
- "鑰匙圈中沒有玉山登入密碼或憑證密碼，請先在終端機執行一次 esun-token.py --setup": "Your E.SUN login or certificate password is not in the keychain; run esun-token.py --setup once in a terminal"
+ "鑰匙圈中沒有玉山登入密碼或憑證密碼，請先在終端機執行一次 esun-token.py --setup": "Your E.SUN login or certificate password is not in the keychain; run esun-token.py --setup once in a terminal",
+ "{0}：尚未公布 {1} 的資料": "{0}: data for {1} not yet published",
+ "代號": "Code",
+ "恢復交易日期": "Resumption date",
+ "暫停交易日期": "Halt date",
+ "櫃買參考價：{0}": "TPEx reference prices: {0}",
+ "櫃買參考價：尚未公布 {0} 的行情": "TPEx reference prices: quotes for {0} not yet published",
+ "櫃買暫停交易：{0}": "TPEx trading halts: {0}",
+ "櫃買暫停先賣後買：{0}": "TPEx sell-first suspensions: {0}",
+ "次日參考價": "Next-day reference price",
+ "證交所參考價": "TWSE reference prices",
+ "證交所暫停交易": "TWSE trading halts",
+ "證交所暫停先賣後買": "TWSE sell-first suspensions",
+ "證交所當沖標的": "TWSE day-trade list",
+ "開盤競價基準": "Opening reference price"
 }

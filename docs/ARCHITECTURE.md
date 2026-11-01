@@ -81,8 +81,10 @@ Day-trade monitoring (Taiwan): with day-trade monitoring on and enough subscript
 runs in full mode — trades, 1-minute bars and order book per stock, split over two connections by sorted symbol — and
 `lib/daytrade.mjs` turns the events into snapshot rows (so the radar and board keep working) plus scores and signals.
 Otherwise it runs in lite mode (aggregates). `auto` plan tries full mode and falls back to lite for the day when the
-subscriptions come up short. Pre-market data comes from the `dayTrade` capability (FinMind: day-trade list,
-suspensions, sell-first bans, reference prices) and TWSE/TPEx disposition lists. After a reconnect (or a mid-session
+subscriptions come up short. Pre-market data for listed stocks comes from the `dayTrade` capability (FinMind Sponsor when available, otherwise
+TWSE open data: `TWTB4U` list, `TWTAWU` halts, `TWTBAU1` sell-first bans, `TWT84U` reference prices); OTC stocks always
+use TPEx open data (`tpexDayTrade`, `tpexPrep`), plus TWSE/TPEx disposition lists. Every item is date-checked: an
+exchange response for another date is discarded, never reused. After a reconnect (or a mid-session
 start) every stock is backfilled through `streamBackfill` before it can signal again. Signals go to the radar
 (`dt-*` alert types) and push; after the close they are evaluated against 1-minute bars and stored in
 `.local/daytrade/<date>.json`. APIs: `GET /api/daytrade`, `GET /api/daytrade/review`, `POST /api/daytrade/settings`.

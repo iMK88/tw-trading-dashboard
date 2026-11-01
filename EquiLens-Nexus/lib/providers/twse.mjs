@@ -40,7 +40,99 @@ export function parseTpexDayTrade(body) {
   return { eligible: rows.map(r => r[0]), sellFirstOff: rows.filter(r => r[1]).map(r => r[0]) };
 }
 export async function tpexDayTrade(date, { signal } = {}) {
-  return parseTpexDayTrade(await get(`https://www.tpex.org.tw/www/zh-tw/intraday/list?date=${date.replace(/-/g, '%2F')}&response=json`, { signal }));
+  const body = await get(`https://www.tpex.org.tw/www/zh-tw/intraday/list?date=${date.replace(/-/g, '%2F')}&response=json`, { signal });
+  return sameDay(body, date) ? parseTpexDayTrade(body) : null; // 尚未公布：不拿其他日期的名單代替
+}
+
+/* ---------- 當沖盤前資料（免金鑰）：可當沖標的、暫停交易、暫停先賣後買、參考價 ---------- */
+// 證交所與櫃買中心在指定日期尚未公布時，可能回傳最近一次的資料（例如查 11/03 回 11/02 的名單），
+// 所以每一項都先核對回應的日期；日期不符時該項留空並記下原因，絕不拿舊資料當今天用。
+const sameDay = (body, date) => String(body?.date || '') === ymd(date);
+const rocIn = s => rocDate(String(s || '').replace(/\./g, '/'));
+// 有些證交所回應把表格放在 tables，有些直接放在最外層（title／fields／data）
+const rwdAny = (body, re) => rwdTable(body, re) || (Array.isArray(body?.fields) ? { title: body.title, fields: body.fields, data: body.data || [] } : null);
+// 上市可當沖標的（TWTB4U，盤前公布；收盤後同一張表補上成交量值）
+export function parseTwseDayTradeList(body, date) {
+  if (!sameDay(body, date)) return null;
+  const t = rwdTable(body, /當日沖銷交易標的/); if (!t?.data?.length) return null;
+  const f = t.fields || [], code = Math.max(0, f.indexOf('證券代號')), mark = f.findIndex(x => /註記/.test(x));
+  const rows = t.data.map(r => [String(r[code]).trim(), mark >= 0 ? String(r[mark] ?? '').trim() : '']).filter(([id]) => id);
+  return { eligible: rows.map(r => r[0]), sellFirstOff: rows.filter(r => r[1]).map(r => r[0]) };
+}
+// 上市暫停先賣後買預告表（TWTBAU1，前一交易日 18:00 更新）：區間涵蓋 date 的代號
+export function parseTwseSellFirstOff(body, date) {
+  const t = rwdAny(body, /暫停先賣後買/); if (!t) return null;
+  const f = t.fields || [], code = f.findIndex(x => /代號/.test(x)), a = f.findIndex(x => /開始日/.test(x)), b = f.findIndex(x => /結束日/.test(x));
+  if (code < 0 || a < 0) return null;
+  return [...new Set((t.data || []).filter(r => { const s = rocIn(r[a]), e = rocIn(r[b]); return s && s <= date && (!e || e >= date); }).map(r => String(r[code]).trim()))];
+}
+// 上市參考價（TWT84U 股價升降幅度，盤前公布）：第一個「開盤競價基準」欄是當日參考價（第二個同名欄是前一日的），只留普通股
+export function parseTwseRefPrices(body, date) {
+  if (!sameDay(body, date)) return null;
+  const t = rwdAny(body, /升降幅度/); if (!t?.data?.length) return null;
+  const f = t.fields || [], code = Math.max(0, f.indexOf('證券代號')), ref = f.indexOf('開盤競價基準');
+  if (ref < 0) return null;
+  const out = {};
+  for (const r of t.data) { const id = String(r[code]).trim(), v = num(r[ref]); if (COMMON.test(id) && v > 0) out[id] = v; }
+  return out;
+}
+// 暫停交易（上市 TWTAWU：暫停日期／恢復日期在同一列）：暫停日在 date 當天或之前、尚未恢復的代號
+export function parseTwseSuspended(body, date) {
+  const t = rwdAny(body, /暫停交易/);
+  if (!t) return /沒有符合/.test(body?.stat || '') ? [] : null; // 期間內沒有暫停交易
+  const f = t.fields || [], code = f.indexOf('證券代號'), a = f.indexOf('暫停交易日期'), b = f.indexOf('恢復交易日期');
+  if (code < 0 || a < 0) return null;
+  return [...new Set((t.data || []).filter(r => { const s = rocIn(r[a]), e = rocIn(r[b]); return s && s <= date && (!e || e > date); }).map(r => String(r[code]).trim()).filter(id => COMMON.test(id)))];
+}
+// 暫停交易（上櫃 tpex_spendi_history：暫停與恢復分成兩列）：依日期排序後，最後一個事件為暫停的代號
+export function parseTpexSuspended(list, date) {
+  const ev = new Map();
+  for (const r of Array.isArray(list) ? list : []) {
+    const id = String(r.SecuritiesCompanyCode || '').trim(); if (!COMMON.test(id)) continue;
+    const s = rocDate(r.DateOfSuspendedTrading), e = rocDate(r.DateOfResumedTrading);
+    if (!ev.has(id)) ev.set(id, []);
+    if (s && s <= date) ev.get(id).push([s, 1]);
+    if (e && e <= date) ev.get(id).push([e, 0]);
+  }
+  return [...ev].filter(([, l]) => l.sort((x, y) => x[0].localeCompare(y[0]) || x[1] - y[1]).at(-1)?.[1] === 1).map(([id]) => id);
+}
+// 上櫃暫停先賣後買預告表（tpex_intraday_trading_pre）：開始日 ≤ date < 恢復日
+export function parseTpexSellFirstOff(list, date) {
+  return [...new Set((Array.isArray(list) ? list : []).filter(r => { const s = rocDate(r.FirstDayToSuspendSellThenBuy), e = rocDate(r.DayOfReinstatingSellThenBuy); return s && s <= date && (!e || e > date); }).map(r => String(r.SecuritiesCompanyCode).trim()))];
+}
+// 上櫃參考價：前一交易日「上櫃股票行情」的「次日 參考價」（櫃買沒有單獨的升降幅度表）；body 須是 prev 那天的行情
+export function parseTpexRefPrices(body, prev) {
+  if (!sameDay(body, prev)) return null;
+  const t = (body?.tables || []).find(x => /股票行情/.test(x.title || '')) || body?.tables?.[0]; if (!t?.data?.length) return null;
+  const f = (t.fields || []).map(x => String(x).replace(/\s/g, '')), code = Math.max(0, f.indexOf('代號')), ref = f.indexOf('次日參考價');
+  if (ref < 0) return null;
+  const out = {};
+  for (const r of t.data) { const id = String(r[code]).trim(), v = num(r[ref]); if (COMMON.test(id) && v > 0) out[id] = v; }
+  return out;
+}
+// 上市四項（與 FinMind dayTradePrep 同形狀）；個別項目失敗或日期不符時留空並記下原因，其餘照用
+export async function twseDayTradePrep(date, { signal } = {}) {
+  const errors = [], d = ymd(date), until = date < ymdToday() ? d : ymd(ymdToday());
+  const item = async (label, url, parse) => { try { const v = parse(await get(url, { signal }), date); if (v == null) errors.push(`${label}：尚未公布 ${date} 的資料`); return v; } catch (e) { errors.push(`${label}：${e.message}`); return null; } };
+  const list = await item('證交所當沖標的', `https://www.twse.com.tw/rwd/zh/dayTrading/TWTB4U?date=${d}&response=json`, parseTwseDayTradeList);
+  const suspended = await item('證交所暫停交易', `https://www.twse.com.tw/rwd/zh/afterTrading/TWTAWU?startDate=${ymd(addDays(date, -60))}&endDate=${until}&response=json`, parseTwseSuspended);
+  const off = await item('證交所暫停先賣後買', 'https://www.twse.com.tw/rwd/zh/dayTrading/TWTBAU1?response=json', parseTwseSellFirstOff);
+  const ref = await item('證交所參考價', `https://www.twse.com.tw/rwd/zh/variation/TWT84U?date=${d}&selectType=ALL&response=json`, parseTwseRefPrices);
+  return { eligible: list?.eligible?.length ? list.eligible : null, suspended: suspended || [], sellFirstOff: [...new Set([...(list?.sellFirstOff || []), ...(off || [])])], ref: ref || {}, errors };
+}
+const ymdToday = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+// 上櫃三項（可當沖標的另由 tpexDayTrade 取得）：暫停交易、暫停先賣後買預告、參考價（前一個交易日的「次日 參考價」）
+export async function tpexPrep(date, { signal } = {}) {
+  const errors = [], out = { suspended: [], sellFirstOff: [], ref: {}, errors };
+  try { out.suspended = parseTpexSuspended(await get('https://www.tpex.org.tw/openapi/v1/tpex_spendi_history', { signal }), date); } catch (e) { errors.push(`櫃買暫停交易：${e.message}`); }
+  try { out.sellFirstOff = parseTpexSellFirstOff(await get('https://www.tpex.org.tw/openapi/v1/tpex_intraday_trading_pre', { signal }), date); } catch (e) { errors.push(`櫃買暫停先賣後買：${e.message}`); }
+  try {
+    // 一定要是 date 的前一個交易日；那天的行情還沒公布時留空，不往前拿更舊的
+    const prev = (await calendar(addDays(date, -20), { signal })).filter(d => d < date).at(-1);
+    const ref = prev ? parseTpexRefPrices(await get(`https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes?date=${tpexDate(prev)}&type=EW&response=json`, { signal }), prev) : null;
+    if (ref) out.ref = ref; else errors.push(`櫃買參考價：尚未公布 ${prev || date} 的行情`);
+  } catch (e) { errors.push(`櫃買參考價：${e.message}`); }
+  return out;
 }
 export async function dispositions(date, { signal } = {}) {
   const from = addDays(date, -30).replace(/-/g, ''), to = date.replace(/-/g, ''), out = new Set(), errors = [];
@@ -164,8 +256,10 @@ async function revenueMap(ctx) {
 export default {
   id: 'twse', name: '證交所／櫃買中心 開放資料', site: 'https://openapi.twse.com.tw', docs: 'https://openapi.twse.com.tw', markets: ['TW'],
   key: 'none', interval: 2500,
-  caps: { universe: 1, calendar: 1, daily: 1, dailyAll: 1, institutional: 'bulk', institutionalAll: 1, valuation: 1, revenue: 'monthly' },
+  caps: { universe: 1, calendar: 1, daily: 1, dailyAll: 1, institutional: 'bulk', institutionalAll: 1, valuation: 1, revenue: 'monthly', dayTrade: 1 },
   universe, calendar, dailyAll, daily, institutionalAll,
+  // 上市當沖盤前資料（上櫃另由 server 以 tpexDayTrade／tpexPrep 補上，不論哪個資料源提供上市部分）
+  dayTrade: (date, ctx) => twseDayTradePrep(date, ctx),
   // 個股法人：以全市場單日資料組成（研究名單更新時批次取得，見 research.mjs）
   institutional: async () => { throw new DataError('{label}：法人資料需以全市場批次更新', { label: LABEL }); },
   valuation: async (id, from, to, ctx) => { const v = (await valuationMap(ctx)).get(id); return v ? [{ stock_id: id, ...v }] : []; },

@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseTdccHolders } from '../lib/providers/tdcc.mjs';
 import { parseFuturesInstitutional, parseOptionInstitutional, parseOptionDaily, taifexSupports } from '../lib/providers/taifex.mjs';
-import { parseTwseTotalInstitutional } from '../lib/providers/twse.mjs';
+import { parseTwseTotalInstitutional, parseTwseDayTradeList, parseTwseSellFirstOff, parseTwseRefPrices, parseTwseSuspended, parseTpexSuspended, parseTpexSellFirstOff, parseTpexRefPrices, parseTpexDayTrade } from '../lib/providers/twse.mjs';
 import { holderMarketDay } from '../lib/chipwatch.mjs';
 import { flowRequester, buildFlows, flowNames } from '../lib/flows.mjs';
 import { buildOptions } from '../lib/options.mjs';
@@ -88,4 +88,45 @@ test('flow requester: derivatives prefer TAIFEX with FinMind fallback; without F
     const r = buildFlows('2026-10-30', { info, stocks: [{ date: '2026-10-30', stock_id: '5371', name: 'Foreign_Investor', buy: 3000, sell: 1000 }] });
     assert.equal(r.coverage.indexed, 2); assert.equal(r.rankings.find(x => x.id === 'tpex-foreign').buy[0].id, '5371');
   } finally { globalThis.fetch = origFetch; }
+});
+
+/* ---------- 當沖盤前資料（證交所、櫃買中心，2026-10-30／11-02 實際回應節錄） ---------- */
+const B4U = date => ({ stat: 'OK', date, tables: [{ title: null, fields: null, data: [] }, { title: '115年11月02日 當日沖銷交易標的', fields: ['證券代號', '證券名稱', '暫停現股賣出後\n現款買進當沖註記'], data: [['00400A', '主動國泰動能高息', ''], ['2330', '台積電', ''], ['2603', '長榮', 'Y']] }] });
+test('TWSE day-trade list (TWTB4U): eligible codes and sell-first marks, only for the requested date', () => {
+  assert.deepEqual(parseTwseDayTradeList(B4U('20261102'), '2026-11-02'), { eligible: ['00400A', '2330', '2603'], sellFirstOff: ['2603'] });
+  // 查 11/03 時證交所回 11/02 的名單：日期不符一律視為尚未公布
+  assert.equal(parseTwseDayTradeList(B4U('20261102'), '2026-11-03'), null);
+  assert.equal(parseTwseDayTradeList({ stat: 'OK', date: '20261031', tables: [{ title: '115年10月31日 當日沖銷交易標的', fields: ['證券代號'], data: [] }] }, '2026-10-31'), null);
+});
+test('TWSE sell-first suspension notice (TWTBAU1, top-level fields): ROC ranges inclusive of the end date', () => {
+  const body = { stat: 'OK', title: '115年11月02日 暫停先賣後買當日沖銷交易標的預告表', fields: ['證券代號', '證券名稱', '停止先賣後買開始日', '停止先賣後買結束日', '原因'], data: [['00400A', '主動國泰動能高息', '115/11/03', '115/11/09', '分配收益'], ['00406A', '主動中信台灣收益', '115/10/29', '115/11/04', '分配收益'], ['006208', '富邦台50', '115/11/12', '115/11/18', '受益人大會']] };
+  assert.deepEqual(parseTwseSellFirstOff(body, '2026-11-02'), ['00406A']);
+  assert.deepEqual(parseTwseSellFirstOff(body, '2026-11-04'), ['00400A', '00406A']);
+  assert.deepEqual(parseTwseSellFirstOff(body, '2026-11-05'), ['00400A']);
+});
+const T84U = date => ({ stat: 'OK', date, title: '115年11月02日 股價升降幅度', fields: ['證券代號', '證券名稱', '漲停價', '開盤競價基準', '跌停價', '開盤競價基準', '收盤價', '買進揭示價', '賣出揭示價', '最近成交日', '可否零股交易'], data: [['0050', '元大台灣50', '115.40', '104.95', '94.50', '107.25', '104.95', '104.90', '104.95', '115.10.30', '不可'], ['1101', '台泥', '31.15', '28.35', '25.55', '28.20', '28.35', '28.30', '28.35', '115.10.30', '不可'], ['2317', '鴻海', '270.00', '245.50', '221.00', '248.00', '245.50', '245.00', '245.50', '115.10.30', '不可'], ['2330', '台積電', '2,605.00', '2,370.00', '2,135.00', '2,415.00', '2,370.00', '2,365.00', '2,370.00', '115.10.30', '不可']] });
+test('TWSE reference prices (TWT84U): first 開盤競價基準 column, common stocks only, date-checked', () => {
+  assert.deepEqual(parseTwseRefPrices(T84U('20261102'), '2026-11-02'), { 1101: 28.35, 2317: 245.5, 2330: 2370 }); // 第二個同名欄（2,415）是前一日的基準
+  assert.equal(parseTwseRefPrices(T84U('20261102'), '2026-11-03'), null);
+  assert.equal(parseTwseRefPrices({ stat: '很抱歉，沒有符合條件的資料!' }, '2026-10-31'), null);
+});
+test('TWSE trading halts (TWTAWU): halted on or before the date and not yet resumed; empty period is an empty list', () => {
+  const body = { stat: 'OK', title: '暫停交易證券', fields: ['編號', '證券代號', '證券名稱', '暫停交易日期', '暫停交易時間', '恢復交易日期', '恢復交易時間'], data: [[1, '030089', '貿聯統一56購04', '115/06/10', '8:00', '115/06/11', '8:00'], [381, '1218', '泰山', '115/08/13', '8:00', '115/08/14', '8:00'], [384, '2072', '世紀風電', '115/06/25', '8:00', '', '']] };
+  assert.deepEqual(parseTwseSuspended(body, '2026-08-13'), ['1218', '2072']); // 權證略過；恢復日當天已可交易
+  assert.deepEqual(parseTwseSuspended(body, '2026-08-14'), ['2072']);
+  assert.deepEqual(parseTwseSuspended({ stat: '很抱歉，沒有符合條件的資料!' }, '2026-10-30'), []);
+});
+test('TPEx day-trade prep: halts from paired suspend/resume rows, sell-first notice, next-day reference prices', () => {
+  const halts = [{ Date: '115', Serial: '1', SecuritiesCompanyCode: '1788', CompanyName: '杏昌', DateOfSuspendedTrading: '1150618', TimeOfSuspendedTrading: '080000', DateOfResumedTrading: '', TimeOfResumedTrading: '' }, { Date: '115', Serial: '2', SecuritiesCompanyCode: '1788', CompanyName: '杏昌', DateOfSuspendedTrading: '', TimeOfSuspendedTrading: '', DateOfResumedTrading: '1150622', TimeOfResumedTrading: '080000' }];
+  assert.deepEqual(parseTpexSuspended(halts, '2026-06-19'), ['1788']);
+  assert.deepEqual(parseTpexSuspended(halts, '2026-06-22'), []);
+  assert.deepEqual(parseTpexSuspended(halts, '2026-06-17'), []);
+  const pre = [{ Date: '1151029', SecuritiesCompanyCode: '00950B', CompanyName: '凱基A級公司債   ', FirstDayToSuspendSellThenBuy: '1151029', DayOfReinstatingSellThenBuy: '1151105', Reason: '分配收益' }];
+  assert.deepEqual(parseTpexSellFirstOff(pre, '2026-11-04'), ['00950B']);
+  assert.deepEqual(parseTpexSellFirstOff(pre, '2026-11-05'), []); // 恢復日當天已恢復
+  const quotes = { stat: 'ok', date: '20261030', tables: [{ title: '上櫃股票行情', fields: ['代號', '名稱', '收盤', '漲跌', '開盤', '最高', '最低', '均價', '成交股數', '成交金額(元)', '成交筆數', '最後買價', '最後買量(張數)', '最後賣價', '最後賣量(張數)', '發行股數', '次日 參考價', '次日 漲停價', '次日 跌停價'], data: [['006201', '元大富櫃50', '40.80', '-2.24 ', '40.30', '41.09', '40.10', '40.53', '517,298', '20,966,771', '700', '40.79', '2', '40.80', '20', '24,446,000', '40.80', '44.88', '36.72'], ['6488', '環球晶', '756.00', '-58.00 ', '775.00', '779.00', '741.00', '755.83', '9,849,934', '7,444,909,918', '38,250', '756.00', '6', '757.00', '59', '528,113,725', '756.00', '831.00', '681.00'], ['8299', '群聯', '1930.00', '-120.00 ', '1960.00', '1970.00', '1900.00', '1938.32', '3,098,085', '6,005,089,385', '13,877', '1930.00', '19', '1935.00', '10', '221,383,247', '1930.00', '2120.00', '1740.00']] }] };
+  assert.deepEqual(parseTpexRefPrices(quotes, '2026-10-30'), { 6488: 756, 8299: 1930 }); // 11/02 的參考價 = 10/30 行情的「次日 參考價」
+  assert.equal(parseTpexRefPrices({ stat: 'ok', date: '20261031', tables: [{ title: '上櫃股票行情', fields: quotes.tables[0].fields, data: [] }] }, '2026-10-31'), null);
+  assert.equal(parseTpexRefPrices(quotes, '2026-11-02'), null); // 行情日期必須是前一個交易日
+  assert.deepEqual(parseTpexDayTrade({ stat: 'ok', date: '20261102', tables: [{ title: '現股當沖交易標的', fields: ['證券代號', '證券名稱', '暫停現股賣出後現款買進當沖註記'], data: [['6488', '環球晶', ''], ['8299', '群聯', 'Y']] }] }), { eligible: ['6488', '8299'], sellFirstOff: ['8299'] });
 });

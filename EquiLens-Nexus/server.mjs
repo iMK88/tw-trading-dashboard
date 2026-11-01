@@ -29,7 +29,7 @@ import { normalizeBooks, checkpoints, buildLiquidity, reduceDay, pickExtras, swa
 import { createDayTrade, buildBaseline, normalizeDaytrade, roundTripCost, tzOffset, evaluateSignal, reviewStats, signalTitle, DT_TITLES } from './lib/daytrade.mjs';
 import { createHistoryLoader } from './lib/daytrade-history.mjs';
 import { regimeOf, strengthOf } from './lib/daytrade-market.mjs';
-import { dispositions, tpexDayTrade, callWarrantQuotes } from './lib/providers/twse.mjs';
+import { dispositions, tpexDayTrade, tpexPrep, callWarrantQuotes } from './lib/providers/twse.mjs';
 import { cnyesNews } from './lib/providers/cnyes.mjs';
 import { queryFlows, validFlowDate, cacheableFlow, flowRequester } from './lib/flows.mjs';
 import { fetchTdccHolders } from './lib/providers/tdcc.mjs';
@@ -380,16 +380,18 @@ function ensureDt(){
   engine.restore(read(`daytrade/${date}.json`,null)?.signals);
   dt={date,engine,baselineDays:baseline.days,baselineStocks:baseline.stock.size};return engine;
 }
-// 盤前（台股 08:30 起）：FinMind 的可當沖標的、暫停交易、暫停先賣後買、參考價；證交所／櫃買的處置股
+// 盤前（台股 08:30 起）：上市的可當沖標的、暫停交易、暫停先賣後買、參考價（FinMind Sponsor，沒有時用證交所開放資料）；
+// 上櫃的同四項（櫃買中心開放資料）；證交所／櫃買的處置股
 async function dtPrepare(){
   const date=today();if(dtPrep.busy)return;
-  dtPrep={...dtPrep,busy:true};const errors=[];let fin=null,disp=null,otc=null;
+  dtPrep={...dtPrep,busy:true};const errors=[];let fin=null,disp=null,otc=null,otcPrep=null;
   try{if(data.has('dayTrade'))fin=await data.dayTrade(date);}catch(e){errors.push(e.message);}
   try{if(M().id==='TW')disp=await dispositions(date);}catch(e){errors.push(e.message);}
-  // 上櫃可當沖標的：FinMind 清單只有上市，另向櫃買中心取得（尚未公布時稍後重試）
+  // 上櫃：上市的資料源只涵蓋上市，另向櫃買中心取得可當沖標的（尚未公布時稍後重試）與暫停交易、暫停先賣後買、參考價
   try{if(M().id==='TW')otc=await tpexDayTrade(date);}catch(e){errors.push(e.message);}
+  try{if(M().id==='TW')otcPrep=await tpexPrep(date);}catch(e){errors.push(e.message);}
   const eligible=fin?.eligible||otc?.eligible?[...new Set([...(fin?.eligible||[]),...(otc?.eligible||[])])]:null;
-  const d={date,eligible,tpex:otc?otc.eligible.length:null,suspended:fin?.suspended||[],sellFirstOff:[...new Set([...(fin?.sellFirstOff||[]),...(otc?.sellFirstOff||[])])],ref:fin?.ref||{},disposition:disp?.ids||[],errors:[...errors,...(fin?.errors||[]),...(disp?.errors||[])],source:data.source('dayTrade'),at:new Date().toISOString()};
+  const d={date,eligible,tpex:otc?otc.eligible.length:null,suspended:[...new Set([...(fin?.suspended||[]),...(otcPrep?.suspended||[])])],sellFirstOff:[...new Set([...(fin?.sellFirstOff||[]),...(otc?.sellFirstOff||[]),...(otcPrep?.sellFirstOff||[])])],ref:{...(otcPrep?.ref||{}),...(fin?.ref||{})},disposition:disp?.ids||[],errors:[...errors,...(fin?.errors||[]),...(otcPrep?.errors||[]),...(disp?.errors||[])],source:data.source('dayTrade'),at:new Date().toISOString()};
   dtPrep={date,busy:false,data:d,at:Date.now()};write('daytrade-prep.json',d);
   if(dt?.date===date)dt.engine.setPrep(dtPrepFor(date,dt.engine.ids));
 }
