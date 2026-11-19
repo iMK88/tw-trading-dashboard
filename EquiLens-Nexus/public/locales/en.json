@@ -3143,5 +3143,11 @@
  "證交所暫停交易": "TWSE trading halts",
  "證交所暫停先賣後買": "TWSE sell-first suspensions",
  "證交所當沖標的": "TWSE day-trade list",
- "開盤競價基準": "Opening reference price"
+ "開盤競價基準": "Opening reference price",
+ "{0} · 盤中": "{0} · intraday",
+ "今日成交量 {0} {1}": "Volume today {0} {1}",
+ "今日成交量 {0} {1} · 前一交易日收盤 {2}（{3}，研究評分依此計算）· 產業 {4}": "Volume today {0} {1} · previous close {2} ({3}, used for the research scores) · Industry {4}",
+ "前一交易日收盤 {2}（{3}，研究評分依此計算）· 產業 {4}": "Previous close {2} ({3}, used for the research scores) · Industry {4}",
+ "昨收 {0}": "Prev. close {0}",
+ "盤中 {0}": "Intraday {0}"
 }

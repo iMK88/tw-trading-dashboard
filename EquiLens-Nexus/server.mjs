@@ -583,6 +583,9 @@ function quoteOf(id,{board=false}={}){
   if(r){const close=Number(r.close),ch=Number(r.change_price),prev=close-ch,n=v=>v==null||v===''?null:Number(v);return{close,change:prev>0?Math.round(ch/prev*1e4)/100:null,changePrice:ch,open:Number(r.open),high:Number(r.high),low:Number(r.low),volume:Number(r.total_volume),amount:Number(r.total_amount),yesterdayVolume:Number(r.yesterday_volume),bid:Number(r.buy_price),ask:Number(r.sell_price),volumeAtBid:n(r.volume_at_bid),volumeAtAsk:n(r.volume_at_ask),source:r===streamFor(id)?'stream':'snapshot',time:String(r.date).slice(11,19),date:String(r.date).slice(0,10)};}
   return null;
 }
+// 研究總覽與個股視窗的今日價格：今天已有盤中快照、而研究資料（日 K）還是前一交易日時，附上最新快照（盤中約每 10 秒）；
+// 收盤後日資料更新完成（asOf＝今天）就不再附上。
+function liveOf(id,asOf){const q=quoteOf(id,{board:true});return q?.close>0&&q.date===today()&&(!asOf||asOf<q.date)?{price:q.close,change:q.change,changePrice:q.changePrice,volume:q.volume,time:q.time,date:q.date}:null;}
 function boardData(ids){
   const day=replayToday(),idx=day?new Map(day.ids.map((id,i)=>[id,i])):new Map(),m=market(),{meta}=uniIndex();
   const stocks=ids.map(id=>{
@@ -1515,7 +1518,7 @@ const server = http.createServer(async (req,res) => {
     if (route === '/api/state') {
       const m = market(), c = config();
       const headlines=m.stocks.flatMap(s=>(raw[s.id]?.news||[]).filter(n=>n.date.slice(0,10)>=minusDays(m.cutoff,30)).map(n=>({stockId:s.id,name:s.name,title:n.title,date:n.date,url:n.link,source:n.source}))).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,60);
-      return json(res,200,{ ...m, appVersion:APP_VERSION, heatDates:heatFiles().slice(-60), heatSummary:heatSummary(),indexSummary:indexSummary(), groups:researchScope.groups, scopeSource:researchScope.source, scopeEntries:researchScope.groups.reduce((n,g)=>n+g.stockIds.length,0), scopeError, stocks:m.stocks.map(({bars,adjustedBars,...s}) => ({...s,chips:{...s.chips,flow:undefined}})), headlines, watchlist, watchGroups, watchExtra:watchExtra(), settings,
+      return json(res,200,{ ...m, appVersion:APP_VERSION, heatDates:heatFiles().slice(-60), heatSummary:heatSummary(),indexSummary:indexSummary(), groups:researchScope.groups, scopeSource:researchScope.source, scopeEntries:researchScope.groups.reduce((n,g)=>n+g.stockIds.length,0), scopeError, stocks:m.stocks.map(({bars,adjustedBars,...s}) => ({...s,chips:{...s.chips,flow:undefined},live:liveOf(s.id,s.asOf)})), headlines, watchlist, watchGroups, watchExtra:watchExtra(), settings,
         config:{market:c.market,language:c.language,setupDone:c.setupDone,publicUrl:c.publicUrl}, marketProfile:clientMarket(M()), upColor:upColor(), capabilities:capsForClient(), dataConfigured:Object.values(capabilityMap()).some(Boolean),
         tokenConfigured:secretConfigured('finmind','FINMIND_API_TOKEN'), llmConfigured:llmConfigured(), claudeConfigured:llmConfigured(), llm:{provider:c.llm.provider,model:c.llm.model||LLM_INFO[c.llm.provider]?.defaultModel||''},
         viewer:req.accessUser?.email||null, monitor:{enabled:settings.monitor!==false,capable:data.has('snapshot'),window:liveWindow(),error:monitorError,lastAt:liveHeat?.at||null}, csrf, job, evidenceCount:evidence.filter(e=>inScope(e.stockId)).length });
@@ -1558,7 +1561,7 @@ const server = http.createServer(async (req,res) => {
     // 手機版（Pocket）用：市場、語言、配色與可用功能（不含任何金鑰）
     if (route === '/api/profile' && req.method === 'GET') { const c = config(); return json(res,200,{ language:c.language, market:clientMarket(M()), upColor:upColor(), capabilities:capsForClient(), publicUrl:c.publicUrl, remote:(({tunnel,hosts,contact})=>({tunnel,hosts,contact}))(remoteInfo()), setupDone:c.setupDone, llmConfigured:llmConfigured(), dataConfigured:Object.values(capabilityMap()).some(Boolean) }); }
     if (route === '/api/job' && req.method === 'GET') return json(res,200,{ job, busy:flowBusy||heatBusy });
-    if (route === '/api/detail') { const s = market().stocks.find(s => s.id === url.searchParams.get('id')); return s ? json(res,200,{ ...s, news:raw[s.id]?.news || [], evidence:evidence.filter(e => e.stockId === s.id) }) : json(res,404,{ error:t('找不到此股票') }); }
+    if (route === '/api/detail') { const s = market().stocks.find(s => s.id === url.searchParams.get('id')); return s ? json(res,200,{ ...s, live:liveOf(s.id,s.asOf), news:raw[s.id]?.news || [], evidence:evidence.filter(e => e.stockId === s.id) }) : json(res,404,{ error:t('找不到此股票') }); }
     if (route === '/api/update' && req.method === 'POST') {
       if (job.running) return json(res,409,{ error:t('已有更新進行中') });
       const b = await body(req);
